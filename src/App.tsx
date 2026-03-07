@@ -5,6 +5,7 @@ import { Dashboard } from './pages/Dashboard';
 import { Issues } from './pages/Issues';
 import { NewIssue } from './pages/NewIssue';
 import { IssueDetail } from './pages/IssueDetail';
+import { ResolutionLibrary } from './pages/ResolutionLibrary';
 
 const App: React.FC = () => {
   return (
@@ -17,6 +18,7 @@ const App: React.FC = () => {
             <Route path="/issues" element={<Issues />} />
             <Route path="/issues/:id" element={<IssueDetail />} />
             <Route path="/new-issue" element={<NewIssue />} />
+            <Route path="/resolution-library" element={<ResolutionLibrary />} />
           </Routes>
         </main>
       </div>

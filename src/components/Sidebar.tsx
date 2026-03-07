@@ -7,12 +7,14 @@ import {
   Zap,
   Menu,
   X,
-  ChevronRight
+  ChevronRight,
+  BookOpen
 } from 'lucide-react';
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, exact: true },
   { to: '/issues', label: 'Issues', icon: ListChecks, exact: false },
+  { to: '/resolution-library', label: 'Resolution Library', icon: BookOpen, exact: false },
   { to: '/new-issue', label: 'New Issue', icon: PlusCircle, exact: false }
 ];
 
@@ -67,55 +69,36 @@ export const Sidebar: React.FC = () => {
       </nav>
 
       {/* Footer */}
-      <div className="px-5 py-4 border-t border-zinc-800">
-        <div className="flex items-center gap-3">
-          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-xs font-bold text-zinc-900 flex-shrink-0">
-            T
-          </div>
-          <div className="flex flex-col leading-none">
-            <span className="text-xs font-medium text-zinc-300">Technician</span>
-            <span className="text-xs text-zinc-600">Support Team</span>
-          </div>
-        </div>
+      <div className="px-4 py-4 border-t border-zinc-800">
+        <p className="text-xs text-zinc-600 text-center">ResolutionDesk v1.0</p>
       </div>
     </div>
   );
 
   return (
     <>
-      {/* Mobile Toggle */}
+      {/* Desktop sidebar */}
+      <aside className="hidden md:flex w-56 flex-col bg-zinc-950 border-r border-zinc-800 flex-shrink-0">
+        <SidebarContent />
+      </aside>
+
+      {/* Mobile toggle */}
       <button
-        onClick={() => setMobileOpen(true)}
-        className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-zinc-900 border border-zinc-700 rounded-lg text-zinc-400 hover:text-zinc-100"
+        className="md:hidden fixed top-4 left-4 z-50 p-2 bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-400"
+        onClick={() => setMobileOpen(v => !v)}
       >
-        <Menu size={18} />
+        {mobileOpen ? <X size={18} /> : <Menu size={18} />}
       </button>
 
-      {/* Mobile Overlay */}
+      {/* Mobile drawer */}
       {mobileOpen && (
-        <div
-          className="lg:hidden fixed inset-0 bg-black/70 z-40"
-          onClick={() => setMobileOpen(false)}
-        />
+        <div className="md:hidden fixed inset-0 z-40 flex">
+          <div className="w-56 bg-zinc-950 border-r border-zinc-800 flex flex-col">
+            <SidebarContent />
+          </div>
+          <div className="flex-1 bg-black/50" onClick={() => setMobileOpen(false)} />
+        </div>
       )}
-
-      {/* Mobile Drawer */}
-      <aside className={`lg:hidden fixed top-0 left-0 h-full w-64 bg-zinc-950 border-r border-zinc-800 z-50 transform transition-transform duration-200 ${
-        mobileOpen ? 'translate-x-0' : '-translate-x-full'
-      }`}>
-        <button
-          onClick={() => setMobileOpen(false)}
-          className="absolute top-4 right-4 p-1.5 text-zinc-500 hover:text-zinc-100"
-        >
-          <X size={16} />
-        </button>
-        <SidebarContent />
-      </aside>
-
-      {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex flex-col w-60 bg-zinc-950 border-r border-zinc-800 h-screen sticky top-0 flex-shrink-0">
-        <SidebarContent />
-      </aside>
     </>
   );
 };
