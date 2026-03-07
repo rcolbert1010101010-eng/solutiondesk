@@ -6,7 +6,6 @@ import { StatusBadge } from './StatusBadge';
 import { SeverityBadge } from './SeverityBadge';
 import { formatRelativeTime } from '../lib/utils';
 import { ChevronDown, ChevronUp, Star, ExternalLink, Zap } from 'lucide-react';
-import { useTheme } from '../context/ThemeContext';
 
 interface SemanticMatchCardProps {
   match: SemanticMatch;
@@ -19,33 +18,23 @@ export const SemanticMatchCard: React.FC<SemanticMatchCardProps> = ({ match, ran
   const { issue, score, reasons } = match;
   const [showReasons, setShowReasons] = useState(!compact);
   const navigate = useNavigate();
-  const { theme } = useTheme();
-  const isDark = theme === 'dark';
 
   const scorePercent = Math.min(Math.round(score * 100), 99);
   const scoreColor =
-    scorePercent >= 60 ? 'text-emerald-400' :
-    scorePercent >= 35 ? 'text-amber-400' :
-    'text-zinc-400';
+    scorePercent >= 60 ? 'text-emerald-600' :
+    scorePercent >= 35 ? 'text-amber-600' :
+    'text-slate-500';
   const scoreBg =
-    scorePercent >= 60 ? 'bg-emerald-500/10 border-emerald-500/20' :
-    scorePercent >= 35 ? 'bg-amber-500/10 border-amber-500/20' :
-    'bg-zinc-500/10 border-zinc-500/20';
+    scorePercent >= 60 ? 'bg-emerald-50 border-emerald-200' :
+    scorePercent >= 35 ? 'bg-amber-50 border-amber-200' :
+    'bg-slate-100 border-slate-200';
 
   return (
-    <div className={`border rounded-xl overflow-hidden transition-all duration-150 ${
-      compact ? 'p-3' : 'p-4'
-    } ${
-      isDark
-        ? 'bg-zinc-900 border-zinc-800 hover:border-zinc-700'
-        : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'
-    }`}>
+    <div className={`bg-white border border-slate-200 rounded-xl overflow-hidden hover:border-slate-300 hover:shadow-sm transition-all duration-150 shadow-sm ${compact ? 'p-3' : 'p-4'}`}>
       <div className="flex items-start gap-3">
         {/* Rank + Score */}
         <div className="flex flex-col items-center gap-1 flex-shrink-0">
-          <span className={`text-xs font-mono ${
-            isDark ? 'text-zinc-600' : 'text-slate-400'
-          }`}>#{rank}</span>
+          <span className="text-xs text-slate-400 font-mono">#{rank}</span>
           <div className={`text-xs font-bold px-1.5 py-0.5 rounded border ${scoreBg} ${scoreColor}`}>
             {scorePercent}%
           </div>
@@ -54,11 +43,9 @@ export const SemanticMatchCard: React.FC<SemanticMatchCardProps> = ({ match, ran
         {/* Content */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap mb-1">
-            <span className={`text-xs font-mono ${
-              isDark ? 'text-zinc-500' : 'text-slate-400'
-            }`}>{issue.id}</span>
+            <span className="text-xs font-mono text-slate-400">{issue.id}</span>
             {issue.isMasterIncident && (
-              <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full bg-violet-500/15 text-violet-400 border border-violet-500/25">
+              <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-600 border border-violet-200">
                 <Star size={9} fill="currentColor" /> Master
               </span>
             )}
@@ -66,30 +53,22 @@ export const SemanticMatchCard: React.FC<SemanticMatchCardProps> = ({ match, ran
             <SeverityBadge severity={issue.severity} size="sm" />
           </div>
 
-          <h4 className={`font-semibold leading-snug ${
-            compact ? 'text-xs' : 'text-sm'
-          } ${
-            isDark ? 'text-zinc-100' : 'text-slate-800'
-          }`}>
+          <h4 className={`font-semibold text-slate-800 leading-snug ${compact ? 'text-xs' : 'text-sm'}`}>
             {issue.title}
           </h4>
 
           {!compact && (
-            <p className={`text-xs mt-1 line-clamp-2 ${
-              isDark ? 'text-zinc-500' : 'text-slate-400'
-            }`}>{issue.description}</p>
+            <p className="text-xs text-slate-500 mt-1 line-clamp-2">{issue.description}</p>
           )}
 
-          <div className={`flex items-center gap-3 mt-2 flex-wrap text-xs ${
-            isDark ? 'text-zinc-500' : 'text-slate-400'
-          }`}>
-            <span>{issue.systemAffected}</span>
-            <span className={isDark ? 'text-zinc-600' : 'text-slate-300'}>•</span>
-            <span>{formatRelativeTime(issue.createdAt)}</span>
+          <div className="flex items-center gap-3 mt-2 flex-wrap">
+            <span className="text-xs text-slate-500">{issue.systemAffected}</span>
+            <span className="text-xs text-slate-300">•</span>
+            <span className="text-xs text-slate-500">{formatRelativeTime(issue.createdAt)}</span>
             {(issue.status === 'Resolved' || issue.status === 'Closed') && issue.resolution && (
               <>
-                <span className={isDark ? 'text-zinc-600' : 'text-slate-300'}>•</span>
-                <span className="text-emerald-400">Has resolution</span>
+                <span className="text-xs text-slate-300">•</span>
+                <span className="text-xs text-emerald-600">Has resolution</span>
               </>
             )}
           </div>
@@ -98,9 +77,7 @@ export const SemanticMatchCard: React.FC<SemanticMatchCardProps> = ({ match, ran
           <div className="mt-2">
             <button
               onClick={() => setShowReasons(v => !v)}
-              className={`flex items-center gap-1 text-xs transition-colors ${
-                isDark ? 'text-zinc-500 hover:text-amber-400' : 'text-slate-400 hover:text-amber-500'
-              }`}
+              className="flex items-center gap-1 text-xs text-slate-400 hover:text-amber-500 transition-colors"
             >
               <Zap size={10} />
               Why this matched
@@ -112,19 +89,13 @@ export const SemanticMatchCard: React.FC<SemanticMatchCardProps> = ({ match, ran
                 {reasons.map((reason, i) => (
                   <span
                     key={i}
-                    className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border ${
-                      isDark
-                        ? 'bg-zinc-800 border-zinc-700 text-zinc-300'
-                        : 'bg-slate-100 border-slate-200 text-slate-600'
-                    }`}
+                    className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-slate-600"
                     title={reason.detail}
                   >
                     <span>{getMatchReasonIcon(reason.type)}</span>
                     {reason.label}
                     {reason.detail && (
-                      <span className={`truncate max-w-[120px] ${
-                        isDark ? 'text-zinc-500' : 'text-slate-400'
-                      }`} title={reason.detail}>
+                      <span className="text-slate-400 truncate max-w-[120px]" title={reason.detail}>
                         : {reason.detail}
                       </span>
                     )}
@@ -139,11 +110,7 @@ export const SemanticMatchCard: React.FC<SemanticMatchCardProps> = ({ match, ran
         <div className="flex flex-col gap-1.5 flex-shrink-0">
           <button
             onClick={() => navigate(`/issues/${issue.id}`)}
-            className={`p-1.5 rounded-lg transition-colors ${
-              isDark
-                ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-100'
-                : 'bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800'
-            }`}
+            className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 transition-colors"
             title="View issue"
           >
             <ExternalLink size={12} />
@@ -151,7 +118,7 @@ export const SemanticMatchCard: React.FC<SemanticMatchCardProps> = ({ match, ran
           {onSelect && (
             <button
               onClick={() => onSelect(issue.id)}
-              className="p-1.5 rounded-lg bg-amber-400/10 hover:bg-amber-400/20 text-amber-400 transition-colors"
+              className="p-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-500 transition-colors"
               title="Use this resolution"
             >
               <Star size={12} />
@@ -162,20 +129,12 @@ export const SemanticMatchCard: React.FC<SemanticMatchCardProps> = ({ match, ran
 
       {/* Resolution preview */}
       {!compact && issue.resolution && (
-        <div className={`mt-3 pt-3 border-t ${
-          isDark ? 'border-zinc-800' : 'border-slate-100'
-        }`}>
-          <p className={`text-xs font-medium mb-1 ${
-            isDark ? 'text-zinc-500' : 'text-slate-400'
-          }`}>Resolution</p>
-          <p className={`text-xs line-clamp-2 ${
-            isDark ? 'text-zinc-400' : 'text-slate-500'
-          }`}>{issue.resolution.summary}</p>
+        <div className="mt-3 pt-3 border-t border-slate-100">
+          <p className="text-xs font-medium text-slate-400 mb-1">Resolution</p>
+          <p className="text-xs text-slate-600 line-clamp-2">{issue.resolution.summary}</p>
           {issue.resolution.rootCause && (
-            <p className={`text-xs mt-1 ${
-              isDark ? 'text-zinc-500' : 'text-slate-400'
-            }`}>
-              <span className={isDark ? 'text-zinc-600' : 'text-slate-300'}>Root cause:</span> {issue.resolution.rootCause.slice(0, 100)}{issue.resolution.rootCause.length > 100 ? '...' : ''}
+            <p className="text-xs text-slate-500 mt-1">
+              <span className="text-slate-400">Root cause:</span> {issue.resolution.rootCause.slice(0, 100)}{issue.resolution.rootCause.length > 100 ? '...' : ''}
             </p>
           )}
         </div>

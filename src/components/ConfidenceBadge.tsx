@@ -14,19 +14,19 @@ export const ConfidenceBadge: React.FC<ConfidenceBadgeProps> = ({ issue, size = 
 
   const config = {
     high: {
-      classes: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20',
+      classes: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
       icon: Award,
-      iconColor: 'text-emerald-400'
+      iconColor: 'text-emerald-600'
     },
     medium: {
-      classes: 'bg-amber-500/10 text-amber-400 border border-amber-500/20',
+      classes: 'bg-amber-50 text-amber-700 border border-amber-200',
       icon: TrendingUp,
-      iconColor: 'text-amber-400'
+      iconColor: 'text-amber-600'
     },
     low: {
-      classes: 'bg-zinc-500/10 text-zinc-400 border border-zinc-500/20',
+      classes: 'bg-slate-100 text-slate-500 border border-slate-200',
       icon: Shield,
-      iconColor: 'text-zinc-400'
+      iconColor: 'text-slate-400'
     }
   }[confidence.level];
 

@@ -9,19 +9,19 @@ interface SeverityBadgeProps {
 const severityConfig: Record<Severity, { label: string; classes: string }> = {
   Low: {
     label: 'Low',
-    classes: 'bg-zinc-500/10 text-zinc-400 border border-zinc-500/20'
+    classes: 'bg-slate-100 text-slate-500 border border-slate-200'
   },
   Medium: {
     label: 'Medium',
-    classes: 'bg-sky-500/10 text-sky-400 border border-sky-500/20'
+    classes: 'bg-sky-50 text-sky-600 border border-sky-200'
   },
   High: {
     label: 'High',
-    classes: 'bg-orange-500/10 text-orange-400 border border-orange-500/20'
+    classes: 'bg-orange-50 text-orange-600 border border-orange-200'
   },
   Critical: {
     label: 'Critical',
-    classes: 'bg-red-500/10 text-red-400 border border-red-500/20'
+    classes: 'bg-red-50 text-red-600 border border-red-200'
   }
 };
 
