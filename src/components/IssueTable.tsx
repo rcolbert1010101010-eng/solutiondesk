@@ -4,8 +4,9 @@ import { Issue } from '../types';
 import { StatusBadge } from './StatusBadge';
 import { SeverityBadge } from './SeverityBadge';
 import { TagBadge } from './TagBadge';
+import { ConfidenceBadge } from './ConfidenceBadge';
 import { formatRelativeTime } from '../lib/utils';
-import { ArrowUpDown, CheckCircle2 } from 'lucide-react';
+import { ArrowUpDown, CheckCircle2, Star, Link } from 'lucide-react';
 
 interface IssueTableProps {
   issues: Issue[];
@@ -45,28 +46,31 @@ export const IssueTable: React.FC<IssueTableProps> = ({ issues }) => {
               <tr
                 key={issue.id}
                 onClick={() => navigate(`/issues/${issue.id}`)}
-                className="hover:bg-zinc-800/40 cursor-pointer transition-colors group"
+                className="hover:bg-zinc-800/40 cursor-pointer transition-colors"
               >
                 <td className="py-3.5 px-4">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-mono text-zinc-500">{issue.id}</span>
-                    {isResolved && <CheckCircle2 size={12} className="text-emerald-400 flex-shrink-0" />}
-                  </div>
+                  <span className="text-xs font-mono text-zinc-500">{issue.id}</span>
                 </td>
                 <td className="py-3.5 px-4">
-                  <span className="text-sm font-medium text-zinc-200 group-hover:text-white transition-colors line-clamp-1">
-                    {issue.title}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {issue.isMasterIncident && (
+                      <Star size={12} className="text-violet-400 flex-shrink-0" fill="currentColor" />
+                    )}
+                    <span className="text-sm text-zinc-200 font-medium truncate max-w-[300px]">{issue.title}</span>
+                  </div>
+                  {isResolved && issue.confidenceScore !== undefined && (
+                    <div className="mt-1">
+                      <ConfidenceBadge score={issue.confidenceScore} size="sm" />
+                    </div>
+                  )}
                 </td>
                 <td className="py-3.5 px-4">
                   <div className="flex flex-wrap gap-1">
-                    {issue.tags && issue.tags.length > 0
-                      ? issue.tags.map(tag => <TagBadge key={tag} tag={tag} size="sm" />)
-                      : <span className="text-xs text-zinc-600">—</span>}
+                    {issue.tags?.map(tag => <TagBadge key={tag} tag={tag} size="sm" />)}
                   </div>
                 </td>
                 <td className="py-3.5 px-4">
-                  <span className="text-xs text-zinc-400">{issue.systemAffected}</span>
+                  <span className="text-xs text-zinc-400 truncate max-w-[120px] block">{issue.systemAffected}</span>
                 </td>
                 <td className="py-3.5 px-4">
                   <SeverityBadge severity={issue.severity} size="sm" />

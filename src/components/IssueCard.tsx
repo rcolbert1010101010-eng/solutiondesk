@@ -4,8 +4,9 @@ import { Issue } from '../types';
 import { StatusBadge } from './StatusBadge';
 import { SeverityBadge } from './SeverityBadge';
 import { TagBadge } from './TagBadge';
+import { ConfidenceBadge } from './ConfidenceBadge';
 import { formatRelativeTime } from '../lib/utils';
-import { Monitor, Clock, User, CheckCircle2 } from 'lucide-react';
+import { Monitor, Clock, User, CheckCircle2, Star, Link } from 'lucide-react';
 
 interface IssueCardProps {
   issue: Issue;
@@ -22,8 +23,13 @@ export const IssueCard: React.FC<IssueCardProps> = ({ issue }) => {
     >
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
             <span className="text-xs font-mono text-zinc-500">{issue.id}</span>
+            {issue.isMasterIncident && (
+              <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full bg-violet-500/15 text-violet-400 border border-violet-500/25">
+                <Star size={9} fill="currentColor" /> Master
+              </span>
+            )}
             {isResolved && (
               <span className="inline-flex items-center gap-1 rounded-full text-xs px-2 py-0.5 font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                 <CheckCircle2 size={10} />
@@ -43,22 +49,30 @@ export const IssueCard: React.FC<IssueCardProps> = ({ issue }) => {
           ))}
         </div>
       )}
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div className="flex items-center gap-3">
-          <StatusBadge status={issue.status} size="sm" />
-          <span className="flex items-center gap-1 text-xs text-zinc-500">
-            <Monitor size={11} />
-            {issue.systemAffected}
-          </span>
+      {(issue.linkedIncidentCount ?? 0) > 0 && (
+        <div className="flex items-center gap-1 text-xs text-zinc-600 mb-2">
+          <Link size={11} />
+          <span>{issue.linkedIncidentCount} linked incidents</span>
+        </div>
+      )}
+      {issue.isMasterIncident && issue.confidenceScore !== undefined && (
+        <div className="mb-2">
+          <ConfidenceBadge score={issue.confidenceScore} size="sm" />
+        </div>
+      )}
+      <div className="flex items-center justify-between text-xs text-zinc-600 mt-2 pt-2 border-t border-zinc-800">
+        <div className="flex items-center gap-1">
+          <Monitor size={11} />
+          <span className="truncate max-w-[120px]">{issue.systemAffected}</span>
         </div>
         <div className="flex items-center gap-3">
           {issue.assignee && (
-            <span className="flex items-center gap-1 text-xs text-zinc-500">
+            <span className="flex items-center gap-1">
               <User size={11} />
               {issue.assignee}
             </span>
           )}
-          <span className="flex items-center gap-1 text-xs text-zinc-500">
+          <span className="flex items-center gap-1">
             <Clock size={11} />
             {formatRelativeTime(issue.createdAt)}
           </span>

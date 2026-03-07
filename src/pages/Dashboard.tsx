@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getAllIssues } from '../lib/db';
+import { getAllIssues, getConfidenceLevel, rankIssues } from '../lib/db';
 import { Issue } from '../types';
 import { KPICard } from '../components/KPICard';
-import { IssueCard } from '../components/IssueCard';
 import { StatusBadge } from '../components/StatusBadge';
 import { SeverityBadge } from '../components/SeverityBadge';
+import { ConfidenceBadge } from '../components/ConfidenceBadge';
 import { formatRelativeTime } from '../lib/utils';
 import {
   AlertTriangle,
@@ -14,7 +14,11 @@ import {
   TrendingUp,
   PlusCircle,
   ArrowRight,
-  Activity
+  Activity,
+  Star,
+  Link,
+  Award,
+  BarChart3
 } from 'lucide-react';
 
 export const Dashboard: React.FC = () => {
@@ -29,13 +33,18 @@ export const Dashboard: React.FC = () => {
   const investigating = issues.filter(i => i.status === 'Investigating').length;
   const resolved = issues.filter(i => i.status === 'Resolved').length;
   const critical = issues.filter(i => i.severity === 'Critical').length;
+  const masterIncidents = issues.filter(i => i.isMasterIncident);
+  const totalLinked = issues.reduce((sum, i) => sum + (i.linkedIncidentCount ?? 0), 0);
 
   const recent = [...issues]
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 4);
 
-  const activeIssues = issues.filter(i => i.status === 'Open' || i.status === 'Investigating');
-  const criticalIssues = issues.filter(i => i.severity === 'Critical' && i.status !== 'Closed' && i.status !== 'Resolved');
+  const topMasterIncidents = rankIssues(masterIncidents).slice(0, 5);
+  const mostReused = [...issues]
+    .filter(i => (i.referenceCount ?? 0) > 0)
+    .sort((a, b) => (b.referenceCount ?? 0) - (a.referenceCount ?? 0))
+    .slice(0, 4);
 
   return (
     <div className="flex-1 overflow-auto">
@@ -50,154 +59,182 @@ export const Dashboard: React.FC = () => {
           </div>
           <button
             onClick={() => navigate('/new-issue')}
-            className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-zinc-900 text-sm font-semibold px-4 py-2.5 rounded-lg transition-colors"
+            className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-zinc-900 font-semibold text-sm px-4 py-2.5 rounded-lg transition-colors"
           >
             <PlusCircle size={16} />
             New Issue
           </button>
         </div>
 
-        {/* KPI Cards */}
+        {/* KPIs */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <KPICard
             title="Open Issues"
             value={open}
-            subtitle="Awaiting action"
+            subtitle={`${investigating} investigating`}
             icon={AlertTriangle}
-            iconColor="text-blue-400"
-            iconBg="bg-blue-400/10"
-          />
-          <KPICard
-            title="Investigating"
-            value={investigating}
-            subtitle="In progress"
-            icon={Activity}
             iconColor="text-amber-400"
             iconBg="bg-amber-400/10"
           />
           <KPICard
+            title="Critical"
+            value={critical}
+            subtitle="need immediate action"
+            icon={Activity}
+            iconColor="text-red-400"
+            iconBg="bg-red-400/10"
+          />
+          <KPICard
             title="Resolved"
             value={resolved}
-            subtitle="This period"
+            subtitle="total resolutions"
             icon={CheckCircle2}
             iconColor="text-emerald-400"
             iconBg="bg-emerald-400/10"
           />
           <KPICard
-            title="Critical"
-            value={critical}
-            subtitle="Need urgent attention"
-            icon={TrendingUp}
-            iconColor="text-red-400"
-            iconBg="bg-red-400/10"
+            title="Master Incidents"
+            value={masterIncidents.length}
+            subtitle={`${totalLinked} issues linked`}
+            icon={Star}
+            iconColor="text-violet-400"
+            iconBg="bg-violet-400/10"
           />
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
           {/* Recent Issues */}
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 bg-zinc-900 border border-zinc-800 rounded-xl p-5">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-semibold text-zinc-100">Recent Issues</h2>
-              <button
-                onClick={() => navigate('/issues')}
-                className="flex items-center gap-1 text-xs text-amber-400 hover:text-amber-300 transition-colors"
-              >
+              <h2 className="text-sm font-semibold text-zinc-100">Recent Issues</h2>
+              <button onClick={() => navigate('/issues')} className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1">
                 View all <ArrowRight size={12} />
               </button>
             </div>
-            <div className="flex flex-col gap-3">
+            <div className="space-y-2">
               {recent.map(issue => (
-                <IssueCard key={issue.id} issue={issue} />
+                <div
+                  key={issue.id}
+                  onClick={() => navigate(`/issues/${issue.id}`)}
+                  className="flex items-center gap-3 p-3 rounded-lg hover:bg-zinc-800 cursor-pointer transition-colors"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="text-xs font-mono text-zinc-500">{issue.id}</span>
+                      {issue.isMasterIncident && (
+                        <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full bg-violet-500/15 text-violet-400 border border-violet-500/25">
+                          <Star size={9} fill="currentColor" /> Master
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-zinc-200 truncate">{issue.title}</p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <StatusBadge status={issue.status} size="sm" />
+                    <SeverityBadge severity={issue.severity} size="sm" />
+                  </div>
+                </div>
               ))}
             </div>
           </div>
 
-          {/* Right Column */}
-          <div className="flex flex-col gap-6">
-            {/* Critical Issues */}
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-base font-semibold text-zinc-100">🔴 Critical Issues</h2>
-                <span className="text-xs bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-0.5 rounded-full">
-                  {criticalIssues.length}
-                </span>
+          {/* Quick Stats */}
+          <div className="space-y-4">
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <BarChart3 size={16} className="text-amber-400" />
+                <h2 className="text-sm font-semibold text-zinc-100">System Health</h2>
               </div>
-              {criticalIssues.length === 0 ? (
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 text-center">
-                  <CheckCircle2 size={24} className="text-emerald-400 mx-auto mb-2" />
-                  <p className="text-sm text-zinc-400">No critical issues</p>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  {criticalIssues.map(issue => (
-                    <button
-                      key={issue.id}
-                      onClick={() => navigate(`/issues/${issue.id}`)}
-                      className="bg-zinc-900 border border-red-500/20 rounded-xl p-4 text-left hover:border-red-500/40 transition-colors w-full"
-                    >
-                      <p className="text-xs font-mono text-zinc-500 mb-1">{issue.id}</p>
-                      <p className="text-sm font-medium text-zinc-100 line-clamp-2 mb-2">{issue.title}</p>
-                      <StatusBadge status={issue.status} size="sm" />
-                    </button>
-                  ))}
-                </div>
-              )}
+              <div className="space-y-2">
+                {[
+                  { label: 'Open', count: open, color: 'bg-blue-400' },
+                  { label: 'Investigating', count: investigating, color: 'bg-amber-400' },
+                  { label: 'Resolved', count: resolved, color: 'bg-emerald-400' },
+                  { label: 'Critical', count: critical, color: 'bg-red-400' }
+                ].map(item => (
+                  <div key={item.label} className="flex items-center gap-3">
+                    <span className="text-xs text-zinc-400 w-24">{item.label}</span>
+                    <div className="flex-1 bg-zinc-800 rounded-full h-1.5">
+                      <div
+                        className={`${item.color} h-1.5 rounded-full transition-all`}
+                        style={{ width: `${Math.min((item.count / Math.max(issues.length, 1)) * 100, 100)}%` }}
+                      />
+                    </div>
+                    <span className="text-xs font-mono text-zinc-400 w-4 text-right">{item.count}</span>
+                  </div>
+                ))}
+              </div>
             </div>
+          </div>
+        </div>
 
-            {/* Activity Feed */}
-            <div>
-              <h2 className="text-base font-semibold text-zinc-100 mb-4">Activity</h2>
-              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-                <div className="flex flex-col gap-3">
-                  {activeIssues.slice(0, 5).map(issue => (
-                    <div key={issue.id} className="flex items-start gap-3">
-                      <div className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-2 flex-shrink-0" />
-                      <div className="min-w-0">
-                        <p className="text-xs text-zinc-300 font-medium truncate">{issue.title}</p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <SeverityBadge severity={issue.severity} size="sm" />
-                          <span className="text-xs text-zinc-600">{formatRelativeTime(issue.createdAt)}</span>
-                        </div>
+        {/* Analytics Widgets */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Top Master Incidents */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Star size={16} className="text-violet-400" />
+                <h2 className="text-sm font-semibold text-zinc-100">Top Master Incidents</h2>
+              </div>
+              <button onClick={() => navigate('/resolution-library')} className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1">
+                Library <ArrowRight size={12} />
+              </button>
+            </div>
+            {topMasterIncidents.length === 0 ? (
+              <p className="text-xs text-zinc-500 py-4 text-center">No master incidents yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {topMasterIncidents.map(issue => (
+                  <div
+                    key={issue.id}
+                    onClick={() => navigate(`/issues/${issue.id}`)}
+                    className="flex items-center gap-3 p-3 rounded-lg hover:bg-zinc-800 cursor-pointer transition-colors"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-zinc-200 truncate">{issue.title}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-xs text-zinc-500">
+                          <Link size={10} className="inline mr-1" />
+                          {issue.linkedIncidentCount ?? 0} linked
+                        </span>
+                        <ConfidenceBadge score={issue.confidenceScore ?? 0} size="sm" />
                       </div>
                     </div>
-                  ))}
-                  {activeIssues.length === 0 && (
-                    <p className="text-xs text-zinc-500 text-center py-2">No active issues</p>
-                  )}
-                </div>
+                  </div>
+                ))}
               </div>
-            </div>
+            )}
+          </div>
 
-            {/* Status Breakdown */}
-            <div>
-              <h2 className="text-base font-semibold text-zinc-100 mb-4">Status Breakdown</h2>
-              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex flex-col gap-3">
-                {(['Open', 'Investigating', 'Resolved', 'Closed'] as const).map(status => {
-                  const count = issues.filter(i => i.status === status).length;
-                  const pct = issues.length > 0 ? Math.round((count / issues.length) * 100) : 0;
-                  const barColors: Record<string, string> = {
-                    Open: 'bg-blue-400',
-                    Investigating: 'bg-amber-400',
-                    Resolved: 'bg-emerald-400',
-                    Closed: 'bg-zinc-500'
-                  };
-                  return (
-                    <div key={status}>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs text-zinc-400">{status}</span>
-                        <span className="text-xs font-semibold text-zinc-300">{count}</span>
-                      </div>
-                      <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all duration-500 ${barColors[status]}`}
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+          {/* Most Reused Resolutions */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Award size={16} className="text-amber-400" />
+              <h2 className="text-sm font-semibold text-zinc-100">Most Reused Resolutions</h2>
             </div>
+            {mostReused.length === 0 ? (
+              <p className="text-xs text-zinc-500 py-4 text-center">No reused resolutions yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {mostReused.map(issue => (
+                  <div
+                    key={issue.id}
+                    onClick={() => navigate(`/issues/${issue.id}`)}
+                    className="flex items-center gap-3 p-3 rounded-lg hover:bg-zinc-800 cursor-pointer transition-colors"
+                  >
+                    <div className="w-7 h-7 rounded-full bg-amber-400/10 flex items-center justify-center flex-shrink-0">
+                      <span className="text-xs font-bold text-amber-400">{issue.referenceCount ?? 0}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-zinc-200 truncate">{issue.title}</p>
+                      <p className="text-xs text-zinc-500">{issue.systemAffected}</p>
+                    </div>
+                    <ConfidenceBadge score={issue.confidenceScore ?? 0} size="sm" />
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
