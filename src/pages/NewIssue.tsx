@@ -1,9 +1,25 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createIssue } from '../lib/db';
-import { Severity, Tag, ALL_TAGS } from '../types';
+import { addIssue, getAllIssues } from '../lib/db';
+import { Severity, Tag, ALL_TAGS, Issue } from '../types';
 import { TagBadge } from '../components/TagBadge';
-import { ArrowLeft, PlusCircle, AlertTriangle } from 'lucide-react';
+import { SeverityBadge } from '../components/SeverityBadge';
+import { SemanticMatchCard } from '../components/SemanticMatchCard';
+import { semanticSearch, SemanticMatch } from '../lib/semanticSearch';
+import {
+  Save,
+  X,
+  AlertTriangle,
+  Monitor,
+  FileText,
+  Tag as TagIcon,
+  ChevronDown,
+  Lightbulb,
+  Loader2,
+  Zap
+} from 'lucide-react';
+
+const SEVERITY_OPTIONS: Severity[] = ['Low', 'Medium', 'High', 'Critical'];
 
 export const NewIssue: React.FC = () => {
   const navigate = useNavigate();
@@ -11,9 +27,47 @@ export const NewIssue: React.FC = () => {
   const [description, setDescription] = useState('');
   const [systemAffected, setSystemAffected] = useState('');
   const [severity, setSeverity] = useState<Severity>('Medium');
-  const [assignee, setAssignee] = useState('');
   const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
-  const [error, setError] = useState('');
+  const [assignee, setAssignee] = useState('');
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitting, setSubmitting] = useState(false);
+
+  // Semantic suggestions
+  const [allIssues, setAllIssues] = useState<Issue[]>([]);
+  const [suggestions, setSuggestions] = useState<SemanticMatch[]>([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(true);
+  const [selectedSuggestionId, setSelectedSuggestionId] = useState<string | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    setAllIssues(getAllIssues());
+  }, []);
+
+  // Build search query from title + description + system
+  const searchQuery = [title, description, systemAffected].filter(Boolean).join(' ');
+
+  useEffect(() => {
+    if (searchQuery.trim().length < 10) {
+      setSuggestions([]);
+      return;
+    }
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setSuggestionsLoading(true);
+      setTimeout(() => {
+        const matches = semanticSearch(searchQuery, allIssues, {
+          topK: 4,
+          minScore: 0.06,
+        });
+        setSuggestions(matches);
+        setSuggestionsLoading(false);
+      }, 100);
+    }, 500);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [searchQuery, allIssues]);
 
   const toggleTag = (tag: Tag) => {
     setSelectedTags(prev =>
@@ -21,163 +75,247 @@ export const NewIssue: React.FC = () => {
     );
   };
 
+  const validate = () => {
+    const newErrors: Record<string, string> = {};
+    if (!title.trim()) newErrors.title = 'Title is required';
+    if (!description.trim()) newErrors.description = 'Description is required';
+    if (!systemAffected.trim()) newErrors.systemAffected = 'Affected system is required';
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    if (!title.trim()) { setError('Title is required.'); return; }
-    if (!description.trim()) { setError('Description is required.'); return; }
-    if (!systemAffected.trim()) { setError('System affected is required.'); return; }
-
-    createIssue({
-      title: title.trim(),
-      description: description.trim(),
-      systemAffected: systemAffected.trim(),
-      severity,
-      status: 'Open',
-      assignee: assignee.trim() || undefined,
-      tags: selectedTags
-    });
-
-    navigate('/issues');
+    if (!validate()) return;
+    setSubmitting(true);
+    setTimeout(() => {
+      const newIssue = addIssue({
+        title: title.trim(),
+        description: description.trim(),
+        systemAffected: systemAffected.trim(),
+        severity,
+        status: 'Open',
+        assignee: assignee.trim() || undefined,
+        tags: selectedTags,
+      });
+      navigate(`/issues/${newIssue.id}`);
+    }, 300);
   };
 
-  const severities: Severity[] = ['Low', 'Medium', 'High', 'Critical'];
-  const severityColors: Record<Severity, string> = {
-    Low: 'border-zinc-500/40 text-zinc-400',
-    Medium: 'border-sky-500/40 text-sky-400',
-    High: 'border-orange-500/40 text-orange-400',
-    Critical: 'border-red-500/40 text-red-400'
-  };
-  const severityActiveColors: Record<Severity, string> = {
-    Low: 'bg-zinc-500/20 border-zinc-500 text-zinc-300',
-    Medium: 'bg-sky-500/20 border-sky-500 text-sky-300',
-    High: 'bg-orange-500/20 border-orange-500 text-orange-300',
-    Critical: 'bg-red-500/20 border-red-500 text-red-300'
+  const handleSelectSuggestion = (issueId: string) => {
+    setSelectedSuggestionId(issueId);
+    navigate(`/issues/${issueId}`);
   };
 
   return (
     <div className="flex-1 overflow-auto">
-      <div className="max-w-2xl mx-auto px-6 py-8">
-        <button
-          onClick={() => navigate(-1)}
-          className="flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-300 mb-6 transition-colors"
-        >
-          <ArrowLeft size={16} /> Back
-        </button>
-
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-zinc-100">Create New Issue</h1>
-          <p className="text-sm text-zinc-500 mt-1">Document a new IT support issue</p>
+      <div className="max-w-5xl mx-auto px-6 py-8">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-2xl font-bold text-zinc-100">Log New Issue</h1>
+            <p className="text-sm text-zinc-500 mt-1">Capture a new incident or support ticket</p>
+          </div>
+          <button
+            onClick={() => navigate('/issues')}
+            className="flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-100 transition-colors"
+          >
+            <X size={16} /> Cancel
+          </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-          {error && (
-            <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-400">
-              <AlertTriangle size={15} />
-              {error}
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="lg:col-span-3 flex flex-col gap-5">
+
+            {/* Title */}
+            <div>
+              <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                Issue Title <span className="text-red-400">*</span>
+              </label>
+              <input
+                type="text"
+                value={title}
+                onChange={e => setTitle(e.target.value)}
+                placeholder="Brief description of the problem"
+                className={`w-full bg-zinc-900 border rounded-lg px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-1 transition-colors ${
+                  errors.title
+                    ? 'border-red-500/50 focus:border-red-500/50 focus:ring-red-500/20'
+                    : 'border-zinc-700 focus:border-amber-500/50 focus:ring-amber-500/20'
+                }`}
+              />
+              {errors.title && <p className="text-xs text-red-400 mt-1">{errors.title}</p>}
             </div>
-          )}
 
-          {/* Title */}
-          <div>
-            <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Title *</label>
-            <input
-              type="text"
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              placeholder="Brief description of the issue"
-              className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2.5 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
-            />
-          </div>
+            {/* Description */}
+            <div>
+              <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                Description <span className="text-red-400">*</span>
+              </label>
+              <textarea
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                placeholder="Detailed description of the issue, symptoms, and impact..."
+                rows={5}
+                className={`w-full bg-zinc-900 border rounded-lg px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-1 transition-colors resize-none ${
+                  errors.description
+                    ? 'border-red-500/50 focus:border-red-500/50 focus:ring-red-500/20'
+                    : 'border-zinc-700 focus:border-amber-500/50 focus:ring-amber-500/20'
+                }`}
+              />
+              {errors.description && <p className="text-xs text-red-400 mt-1">{errors.description}</p>}
+            </div>
 
-          {/* Description */}
-          <div>
-            <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Description *</label>
-            <textarea
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              placeholder="Detailed description of the issue, symptoms, and impact..."
-              rows={5}
-              className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2.5 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors resize-none"
-            />
-          </div>
-
-          {/* System Affected */}
-          <div>
-            <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">System Affected *</label>
-            <input
-              type="text"
-              value={systemAffected}
-              onChange={e => setSystemAffected(e.target.value)}
-              placeholder="e.g. Network / VPN, Active Directory, Microsoft 365..."
-              className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2.5 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
-            />
-          </div>
-
-          {/* Severity */}
-          <div>
-            <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Severity</label>
-            <div className="flex gap-2 flex-wrap">
-              {severities.map(s => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => setSeverity(s)}
-                  className={`px-4 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-                    severity === s ? severityActiveColors[s] : severityColors[s] + ' bg-transparent hover:bg-zinc-800'
+            {/* System Affected */}
+            <div>
+              <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                System Affected <span className="text-red-400">*</span>
+              </label>
+              <div className="relative">
+                <Monitor size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                <input
+                  type="text"
+                  value={systemAffected}
+                  onChange={e => setSystemAffected(e.target.value)}
+                  placeholder="e.g. Network / VPN, Email / Exchange, Active Directory"
+                  className={`w-full bg-zinc-900 border rounded-lg pl-9 pr-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-1 transition-colors ${
+                    errors.systemAffected
+                      ? 'border-red-500/50 focus:border-red-500/50 focus:ring-red-500/20'
+                      : 'border-zinc-700 focus:border-amber-500/50 focus:ring-amber-500/20'
                   }`}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Tags */}
-          <div>
-            <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Tags</label>
-            <div className="flex gap-2 flex-wrap">
-              {ALL_TAGS.map(tag => (
-                <TagBadge
-                  key={tag}
-                  tag={tag}
-                  size="md"
-                  selected={selectedTags.includes(tag)}
-                  onClick={toggleTag}
                 />
-              ))}
+              </div>
+              {errors.systemAffected && <p className="text-xs text-red-400 mt-1">{errors.systemAffected}</p>}
+            </div>
+
+            {/* Severity */}
+            <div>
+              <label className="block text-xs font-medium text-zinc-400 mb-1.5">Severity</label>
+              <div className="flex gap-2 flex-wrap">
+                {SEVERITY_OPTIONS.map(s => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setSeverity(s)}
+                    className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
+                      severity === s
+                        ? 'border-amber-500/50 bg-amber-500/10 text-amber-400'
+                        : 'border-zinc-700 bg-zinc-900 text-zinc-400 hover:border-zinc-600'
+                    }`}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Tags */}
+            <div>
+              <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                <span className="flex items-center gap-1"><TagIcon size={12} /> Tags</span>
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {ALL_TAGS.map(tag => (
+                  <TagBadge
+                    key={tag}
+                    tag={tag}
+                    selected={selectedTags.includes(tag)}
+                    onClick={toggleTag}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Assignee */}
+            <div>
+              <label className="block text-xs font-medium text-zinc-400 mb-1.5">Assignee (optional)</label>
+              <input
+                type="text"
+                value={assignee}
+                onChange={e => setAssignee(e.target.value)}
+                placeholder="Name of the person handling this issue"
+                className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-colors"
+              />
+            </div>
+
+            {/* Submit */}
+            <div className="flex gap-3 pt-2">
+              <button
+                type="submit"
+                disabled={submitting}
+                className="flex items-center gap-2 px-6 py-2.5 bg-amber-400 hover:bg-amber-300 text-zinc-900 font-semibold text-sm rounded-lg transition-colors disabled:opacity-50"
+              >
+                <Save size={16} />
+                {submitting ? 'Logging...' : 'Log Issue'}
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/issues')}
+                className="px-4 py-2.5 border border-zinc-700 rounded-lg text-sm text-zinc-400 hover:text-zinc-100 hover:border-zinc-600 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+
+          {/* Suggestions Panel */}
+          <div className="lg:col-span-2">
+            <div className="sticky top-6">
+              <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 bg-amber-400/10 rounded-md flex items-center justify-center">
+                      <Lightbulb size={11} className="text-amber-400" />
+                    </div>
+                    <span className="text-xs font-semibold text-zinc-300">Similar Past Issues</span>
+                  </div>
+                  <button
+                    onClick={() => setShowSuggestions(v => !v)}
+                    className="text-zinc-500 hover:text-zinc-300 transition-colors"
+                  >
+                    <ChevronDown size={14} className={`transition-transform ${showSuggestions ? '' : '-rotate-90'}`} />
+                  </button>
+                </div>
+
+                {showSuggestions && (
+                  <div className="p-3">
+                    {searchQuery.trim().length < 10 ? (
+                      <div className="text-center py-6">
+                        <Zap size={20} className="mx-auto mb-2 text-zinc-700" />
+                        <p className="text-xs text-zinc-500">Start filling in the form to see similar past issues suggested here.</p>
+                      </div>
+                    ) : suggestionsLoading ? (
+                      <div className="flex items-center gap-2 text-zinc-500 text-xs py-4 justify-center">
+                        <Loader2 size={13} className="animate-spin" />
+                        Searching for similar issues...
+                      </div>
+                    ) : suggestions.length === 0 ? (
+                      <div className="text-center py-6">
+                        <Lightbulb size={20} className="mx-auto mb-2 text-zinc-700" />
+                        <p className="text-xs text-zinc-500">No similar issues found. This may be a novel incident.</p>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-2">
+                        <p className="text-xs text-zinc-500 mb-1">
+                          {suggestions.length} similar incident{suggestions.length !== 1 ? 's' : ''} found — check before logging.
+                        </p>
+                        {suggestions.map((match, i) => (
+                          <SemanticMatchCard
+                            key={match.issue.id}
+                            match={match}
+                            rank={i + 1}
+                            onSelect={handleSelectSuggestion}
+                            compact
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-
-          {/* Assignee */}
-          <div>
-            <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Assignee</label>
-            <input
-              type="text"
-              value={assignee}
-              onChange={e => setAssignee(e.target.value)}
-              placeholder="Assign to a team member (optional)"
-              className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2.5 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
-            />
-          </div>
-
-          <div className="flex gap-3 pt-2">
-            <button
-              type="button"
-              onClick={() => navigate(-1)}
-              className="flex-1 px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg text-sm font-medium transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-400 hover:bg-amber-300 text-zinc-900 rounded-lg text-sm font-semibold transition-colors"
-            >
-              <PlusCircle size={16} />
-              Create Issue
-            </button>
-          </div>
-        </form>
+        </div>
       </div>
     </div>
   );
