@@ -12,10 +12,9 @@ const AppShell: React.FC = () => {
   const { theme } = useTheme();
 
   return (
-    <div className={theme === 'dark'
-      ? 'flex min-h-screen bg-[#0f0f10]'
-      : 'flex min-h-screen bg-slate-100'
-    }>
+    <div
+      className={`${theme === 'dark' ? 'dark' : 'light'} ${theme === 'dark' ? 'flex min-h-screen bg-[#0f0f10]' : 'flex min-h-screen bg-slate-100'}`}
+    >
       <Sidebar />
       <main className="flex-1 flex flex-col min-w-0">
         <Routes>
