@@ -43,7 +43,9 @@ import {
   Plus,
   ChevronRight,
   Shield,
-  BookOpen
+  BookOpen,
+  Copy,
+  Check
 } from 'lucide-react';
 
 const RELATIONSHIP_LABELS: Record<RelationshipType, string> = {
@@ -64,71 +66,77 @@ export const IssueDetail: React.FC = () => {
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [linkedRelationships, setLinkedRelationships] = useState<IssueRelationship[]>([]);
   const [sourceRelationship, setSourceRelationship] = useState<IssueRelationship | undefined>();
-  const [masterIssue, setMasterIssue] = useState<Issue | null>(null);
+  const [allIssues, setAllIssues] = useState<Issue[]>([]);
+  const [linkSearch, setLinkSearch] = useState('');
+  const [selectedLinkTarget, setSelectedLinkTarget] = useState<string>('');
+  const [selectedRelType, setSelectedRelType] = useState<RelationshipType>('duplicate');
+  const [copied, setCopied] = useState(false);
 
-  const [editForm, setEditForm] = useState<Partial<Issue>>({});
-  const [editTags, setEditTags] = useState<Tag[]>([]);
-  const [resolutionForm, setResolutionForm] = useState<Resolution>({
-    rootCause: '',
-    stepsTaken: '',
-    finalResolution: '',
-    preventionNotes: '',
-    resolvedAt: new Date().toISOString()
+  const [editForm, setEditForm] = useState({
+    title: '',
+    description: '',
+    systemAffected: '',
+    severity: 'Medium' as Severity,
+    status: 'Open' as Status,
+    assignee: '',
+    tags: [] as Tag[]
+  });
+
+  const [resolutionForm, setResolutionForm] = useState({
+    title: '',
+    steps: '',
+    notes: ''
   });
 
   const loadIssue = () => {
-    if (id) {
-      const found = getIssueById(id);
-      if (found) {
-        setIssue(found);
-        setEditForm(found);
-        setEditTags(found.tags ?? []);
-        if (found.isMasterIncident) {
-          setLinkedRelationships(getRelationshipsForMaster(id));
-        }
-        const srcRel = getRelationshipForSource(id);
-        setSourceRelationship(srcRel);
-        if (srcRel) {
-          const mi = getIssueById(srcRel.master_issue_id);
-          setMasterIssue(mi ?? null);
-        } else {
-          setMasterIssue(null);
-        }
-      }
+    if (!id) return;
+    const found = getIssueById(id);
+    if (!found) { navigate('/issues'); return; }
+    setIssue(found);
+    setEditForm({
+      title: found.title,
+      description: found.description,
+      systemAffected: found.systemAffected,
+      severity: found.severity,
+      status: found.status,
+      assignee: found.assignee ?? '',
+      tags: found.tags ?? []
+    });
+    if (found.isMasterIncident) {
+      setLinkedRelationships(getRelationshipsForMaster(found.id));
     }
+    const srcRel = getRelationshipForSource(found.id);
+    setSourceRelationship(srcRel);
   };
 
   useEffect(() => {
     loadIssue();
+    setAllIssues(getAllIssues());
   }, [id]);
 
   if (!issue) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <div className="text-center">
-          <AlertTriangle size={40} className="text-zinc-600 mx-auto mb-4" />
-          <p className="text-zinc-400 text-base font-medium">Issue not found</p>
-          <p className="text-zinc-600 text-sm mt-1">The issue you are looking for does not exist.</p>
-          <button onClick={() => navigate('/issues')} className="mt-4 text-sm text-amber-400 hover:text-amber-300">
-            Back to Issues
-          </button>
-        </div>
+        <p className="text-zinc-500">Loading...</p>
       </div>
     );
   }
 
-  const isResolved = issue.status === 'Resolved' || issue.status === 'Closed';
-  const confidenceScore = issue.confidenceScore ?? calculateConfidenceScore(issue);
-
   const handleSave = () => {
     if (!id) return;
-    const updated = updateIssue(id, { ...editForm, tags: editTags });
-    if (updated) {
-      setIssue(updated);
-      setEditing(false);
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
-    }
+    updateIssue(id, {
+      title: editForm.title,
+      description: editForm.description,
+      systemAffected: editForm.systemAffected,
+      severity: editForm.severity,
+      status: editForm.status,
+      assignee: editForm.assignee || undefined,
+      tags: editForm.tags
+    });
+    setSaveSuccess(true);
+    setTimeout(() => setSaveSuccess(false), 2000);
+    setEditing(false);
+    loadIssue();
   };
 
   const handleDelete = () => {
@@ -138,442 +146,573 @@ export const IssueDetail: React.FC = () => {
   };
 
   const handleAddResolution = () => {
-    if (!id) return;
-    const updated = addResolution(id, resolutionForm);
-    if (updated) {
-      setIssue(updated);
-      setShowResolutionForm(false);
-    }
+    if (!id || !resolutionForm.title.trim() || !resolutionForm.steps.trim()) return;
+    const steps = resolutionForm.steps.split('\n').filter(s => s.trim());
+    addResolution(id, {
+      title: resolutionForm.title.trim(),
+      steps,
+      notes: resolutionForm.notes.trim() || undefined
+    });
+    setResolutionForm({ title: '', steps: '', notes: '' });
+    setShowResolutionForm(false);
+    loadIssue();
   };
 
   const handlePromote = () => {
     if (!id) return;
-    const updated = promoteToMasterIncident(id);
-    if (updated) {
-      setIssue(updated);
-      setLinkedRelationships(getRelationshipsForMaster(id));
-    }
+    promoteToMasterIncident(id);
+    loadIssue();
   };
 
   const handleDemote = () => {
     if (!id) return;
-    const updated = demoteMasterIncident(id);
-    if (updated) setIssue(updated);
+    demoteMasterIncident(id);
+    loadIssue();
+  };
+
+  const handleLink = () => {
+    if (!id || !selectedLinkTarget) return;
+    linkIssueToMaster(id, selectedLinkTarget, selectedRelType);
+    setShowLinkModal(false);
+    setSelectedLinkTarget('');
+    setLinkSearch('');
+    loadIssue();
   };
 
   const handleUnlink = () => {
-    if (!id || !sourceRelationship) return;
-    unlinkIssue(id, sourceRelationship.master_issue_id);
-    setSourceRelationship(undefined);
-    setMasterIssue(null);
+    if (!id) return;
+    unlinkIssue(id);
+    loadIssue();
+  };
+
+  const handleCopyLink = () => {
+    const currentUrl = new URL(window.location.href);
+    navigator.clipboard.writeText(currentUrl.toString()).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {
+      // fallback
+      const textArea = document.createElement('textarea');
+      textArea.value = currentUrl.toString();
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  const handleIncrementReference = (resolutionId: string) => {
+    if (!id) return;
+    incrementReferenceCount(id, resolutionId);
     loadIssue();
   };
 
   const toggleTag = (tag: Tag) => {
-    setEditTags(prev =>
-      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
-    );
+    setEditForm(prev => ({
+      ...prev,
+      tags: prev.tags.includes(tag)
+        ? prev.tags.filter(t => t !== tag)
+        : [...prev.tags, tag]
+    }));
   };
 
-  const statusOptions: Status[] = ['Open', 'Investigating', 'Resolved', 'Closed'];
-  const severityOptions: Severity[] = ['Low', 'Medium', 'High', 'Critical'];
+  const isResolved = issue.status === 'Resolved' || issue.status === 'Closed';
+  const confidence = getConfidenceLevel(issue);
+  const confidenceScore = calculateConfidenceScore(issue);
+
+  const linkableMasters = allIssues.filter(i =>
+    i.id !== issue.id &&
+    i.isMasterIncident &&
+    (linkSearch === '' ||
+      i.title.toLowerCase().includes(linkSearch.toLowerCase()) ||
+      i.id.toLowerCase().includes(linkSearch.toLowerCase()))
+  );
+
+  const masterIssue = sourceRelationship
+    ? allIssues.find(i => i.id === sourceRelationship.masterId)
+    : undefined;
 
   return (
     <div className="flex-1 overflow-auto">
       <div className="max-w-4xl mx-auto px-6 py-8">
-        {/* Header */}
-        <div className="flex items-center gap-4 mb-6">
+        {/* Back + Actions */}
+        <div className="flex items-center justify-between mb-6">
           <button
             onClick={() => navigate('/issues')}
-            className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors"
+            className="flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-100 transition-colors"
           >
-            <ArrowLeft size={20} />
+            <ArrowLeft size={16} />
+            Back to Issues
           </button>
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-mono text-zinc-500">{issue.id}</span>
-              {issue.isMasterIncident && (
-                <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-300 border border-violet-500/30 font-medium">
-                  <Star size={10} fill="currentColor" /> Master Incident
-                </span>
-              )}
-              {issue.masterIncidentId && (
-                <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-300 border border-sky-500/30">
-                  <Link size={10} /> Linked
-                </span>
-              )}
-            </div>
-          </div>
           <div className="flex items-center gap-2">
-            {saveSuccess && (
-              <span className="text-xs text-emerald-400 flex items-center gap-1">
-                <CheckCircle2 size={14} /> Saved
-              </span>
+            <button
+              onClick={handleCopyLink}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition-colors border border-zinc-700"
+              title="Copy link to this issue"
+            >
+              {copied ? <Check size={13} className="text-emerald-400" /> : <Link size={13} />}
+              {copied ? 'Copied!' : 'Copy Link'}
+            </button>
+            {!editing && (
+              <button
+                onClick={() => setEditing(true)}
+                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition-colors border border-zinc-700"
+              >
+                <Edit3 size={13} />
+                Edit
+              </button>
             )}
-            {!editing ? (
-              <>
-                <button
-                  onClick={() => setEditing(true)}
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-800 text-sm transition-colors"
-                >
-                  <Edit3 size={14} /> Edit
-                </button>
-                <button
-                  onClick={() => setShowDeleteConfirm(true)}
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 text-sm transition-colors"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </>
+            {!showDeleteConfirm ? (
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors border border-red-500/20"
+              >
+                <Trash2 size={13} />
+                Delete
+              </button>
             ) : (
-              <>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-zinc-400">Confirm delete?</span>
                 <button
-                  onClick={handleSave}
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-400 hover:bg-amber-300 text-zinc-900 font-semibold text-sm transition-colors"
+                  onClick={handleDelete}
+                  className="text-xs px-3 py-1.5 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors"
                 >
-                  <Save size={14} /> Save
+                  Yes, Delete
                 </button>
                 <button
-                  onClick={() => setEditing(false)}
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-800 text-sm transition-colors"
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="text-xs px-3 py-1.5 rounded-lg bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition-colors border border-zinc-700"
                 >
-                  <X size={14} /> Cancel
+                  Cancel
                 </button>
-              </>
+              </div>
             )}
           </div>
         </div>
 
-        {showDeleteConfirm && (
-          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
-            <p className="text-sm text-red-400 mb-3">Are you sure you want to delete this issue? This cannot be undone.</p>
-            <div className="flex gap-2">
-              <button onClick={handleDelete} className="px-3 py-1.5 bg-red-500 hover:bg-red-400 text-white text-sm rounded-lg font-medium">Delete</button>
-              <button onClick={() => setShowDeleteConfirm(false)} className="px-3 py-1.5 border border-zinc-700 text-zinc-300 text-sm rounded-lg hover:bg-zinc-800">Cancel</button>
-            </div>
+        {saveSuccess && (
+          <div className="mb-4 px-4 py-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm flex items-center gap-2">
+            <CheckCircle2 size={14} />
+            Changes saved successfully.
           </div>
         )}
 
-        {/* Issue Info */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main Content */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Title & Description */}
-            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+        {/* Main Card */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 mb-6">
+          {/* Header */}
+          <div className="flex items-start justify-between gap-4 mb-4">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap mb-2">
+                <span className="text-xs font-mono text-zinc-500">{issue.id}</span>
+                {issue.isMasterIncident && (
+                  <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-400 border border-violet-500/25 font-medium">
+                    <Star size={10} fill="currentColor" /> Master Incident
+                  </span>
+                )}
+                {sourceRelationship && (
+                  <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                    <Link2 size={10} /> Linked
+                  </span>
+                )}
+                {isResolved && (
+                  <span className="inline-flex items-center gap-1 rounded-full text-xs px-2 py-0.5 font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    <CheckCircle2 size={10} /> Resolved
+                  </span>
+                )}
+              </div>
               {editing ? (
-                <div className="space-y-4">
-                  <div>
-                    <label className="text-xs text-zinc-500 mb-1.5 block">Title</label>
-                    <input
-                      type="text"
-                      value={editForm.title ?? ''}
-                      onChange={e => setEditForm(p => ({ ...p, title: e.target.value }))}
-                      className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-amber-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-zinc-500 mb-1.5 block">Description</label>
-                    <textarea
-                      value={editForm.description ?? ''}
-                      onChange={e => setEditForm(p => ({ ...p, description: e.target.value }))}
-                      rows={4}
-                      className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-amber-500 resize-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-zinc-500 mb-1.5 block">System Affected</label>
-                    <input
-                      type="text"
-                      value={editForm.systemAffected ?? ''}
-                      onChange={e => setEditForm(p => ({ ...p, systemAffected: e.target.value }))}
-                      className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-amber-500"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-xs text-zinc-500 mb-1.5 block">Status</label>
-                      <select
-                        value={editForm.status ?? issue.status}
-                        onChange={e => setEditForm(p => ({ ...p, status: e.target.value as Status }))}
-                        className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-amber-500"
-                      >
-                        {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-xs text-zinc-500 mb-1.5 block">Severity</label>
-                      <select
-                        value={editForm.severity ?? issue.severity}
-                        onChange={e => setEditForm(p => ({ ...p, severity: e.target.value as Severity }))}
-                        className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-amber-500"
-                      >
-                        {severityOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-xs text-zinc-500 mb-2 block">Tags</label>
-                    <div className="flex flex-wrap gap-2">
-                      {ALL_TAGS.map(tag => (
-                        <button
-                          key={tag}
-                          type="button"
-                          onClick={() => toggleTag(tag)}
-                          className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
-                            editTags.includes(tag)
-                              ? 'bg-amber-400/20 text-amber-300 border-amber-400/50'
-                              : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:border-zinc-500'
-                          }`}
-                        >
-                          {tag}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-xs text-zinc-500 mb-1.5 block">Assignee</label>
-                    <input
-                      type="text"
-                      value={editForm.assignee ?? ''}
-                      onChange={e => setEditForm(p => ({ ...p, assignee: e.target.value }))}
-                      className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-amber-500"
-                    />
-                  </div>
-                </div>
+                <input
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-lg font-semibold focus:outline-none focus:border-amber-500"
+                  value={editForm.title}
+                  onChange={e => setEditForm(p => ({ ...p, title: e.target.value }))}
+                />
               ) : (
-                <div>
-                  <h1 className="text-xl font-bold text-zinc-100 mb-3">{issue.title}</h1>
-                  <p className="text-sm text-zinc-400 leading-relaxed">{issue.description}</p>
-                </div>
+                <h1 className="text-xl font-bold text-zinc-100">{issue.title}</h1>
               )}
             </div>
-
-            {/* Resolution Section */}
-            {isResolved && issue.resolution && (
-              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-                <div className="flex items-center gap-2 mb-5">
-                  <CheckCircle2 size={18} className="text-emerald-400" />
-                  <h2 className="text-base font-semibold text-zinc-100">Resolution Details</h2>
-                  {issue.isMasterIncident && (
-                    <ConfidenceBadge score={confidenceScore} />
-                  )}
-                </div>
-                <div className="space-y-4">
-                  {[
-                    { label: 'Root Cause', value: issue.resolution.rootCause },
-                    { label: 'Steps Taken', value: issue.resolution.stepsTaken },
-                    { label: 'Final Resolution', value: issue.resolution.finalResolution },
-                    { label: 'Prevention Notes', value: issue.resolution.preventionNotes }
-                  ].map(item => item.value && (
-                    <div key={item.label}>
-                      <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-1.5">{item.label}</p>
-                      <p className="text-sm text-zinc-300 leading-relaxed bg-zinc-800/50 rounded-lg p-3">{item.value}</p>
-                    </div>
-                  ))}
-                  <div className="pt-2 border-t border-zinc-800">
-                    <p className="text-xs text-zinc-600">
-                      Resolved {formatRelativeTime(issue.resolution.resolvedAt)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Linked Incidents (Master Incident view) */}
-            {issue.isMasterIncident && (
-              <LinkedIncidentsPanel
-                masterId={issue.id}
-                relationships={linkedRelationships}
-                onNavigate={navigate}
-              />
-            )}
-
-            {/* Linked to Master Incident (source view) */}
-            {masterIssue && sourceRelationship && (
-              <div className="bg-zinc-900 border border-violet-500/20 rounded-xl p-5">
-                <div className="flex items-center gap-2 mb-3">
-                  <Link2 size={16} className="text-violet-400" />
-                  <h3 className="text-sm font-semibold text-zinc-100">Linked to Master Incident</h3>
-                </div>
-                <div
-                  className="flex items-center gap-3 p-3 bg-zinc-800 rounded-lg hover:bg-zinc-700 cursor-pointer transition-colors"
-                  onClick={() => navigate(`/issues/${masterIssue.id}`)}
+            <div className="flex flex-col items-end gap-2">
+              {editing ? (
+                <select
+                  className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1.5 text-zinc-100 text-xs focus:outline-none focus:border-amber-500"
+                  value={editForm.severity}
+                  onChange={e => setEditForm(p => ({ ...p, severity: e.target.value as Severity }))}
                 >
-                  <Star size={14} className="text-violet-400 flex-shrink-0" fill="currentColor" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-zinc-200 truncate">{masterIssue.title}</p>
-                    <p className="text-xs text-zinc-500">
-                      {masterIssue.id} · {RELATIONSHIP_LABELS[sourceRelationship.relationship_type]} · linked by {sourceRelationship.linked_by}
-                    </p>
-                  </div>
-                  <ChevronRight size={14} className="text-zinc-600 flex-shrink-0" />
-                </div>
-                <button
-                  onClick={handleUnlink}
-                  className="mt-2 text-xs text-red-400 hover:text-red-300 transition-colors"
-                >
-                  Remove link
-                </button>
-              </div>
-            )}
-
-            {/* Add Resolution form */}
-            {!isResolved && !showResolutionForm && (
-              <button
-                onClick={() => setShowResolutionForm(true)}
-                className="w-full border border-dashed border-zinc-700 rounded-xl p-4 text-sm text-zinc-500 hover:text-zinc-300 hover:border-zinc-500 transition-colors"
-              >
-                + Add Resolution Details
-              </button>
-            )}
-
-            {showResolutionForm && (
-              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-semibold text-zinc-100">Add Resolution</h3>
-                  <button onClick={() => setShowResolutionForm(false)} className="text-zinc-500 hover:text-zinc-300">
-                    <X size={16} />
-                  </button>
-                </div>
-                <div className="space-y-4">
-                  {([
-                    { key: 'rootCause', label: 'Root Cause' },
-                    { key: 'stepsTaken', label: 'Steps Taken' },
-                    { key: 'finalResolution', label: 'Final Resolution' },
-                    { key: 'preventionNotes', label: 'Prevention Notes' }
-                  ] as { key: keyof Resolution; label: string }[]).map(field => (
-                    <div key={field.key}>
-                      <label className="text-xs text-zinc-500 mb-1.5 block">{field.label}</label>
-                      <textarea
-                        value={resolutionForm[field.key]}
-                        onChange={e => setResolutionForm(p => ({ ...p, [field.key]: e.target.value }))}
-                        rows={3}
-                        className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-amber-500 resize-none"
-                      />
-                    </div>
+                  {(['Low','Medium','High','Critical'] as Severity[]).map(s => (
+                    <option key={s} value={s}>{s}</option>
                   ))}
-                  <button
-                    onClick={handleAddResolution}
-                    className="w-full bg-emerald-500 hover:bg-emerald-400 text-white font-semibold text-sm py-2.5 rounded-lg transition-colors"
-                  >
-                    Mark as Resolved
-                  </button>
-                </div>
-              </div>
+                </select>
+              ) : (
+                <SeverityBadge severity={issue.severity} />
+              )}
+              <ConfidenceBadge issue={issue} showScore />
+            </div>
+          </div>
+
+          {/* Meta */}
+          <div className="flex flex-wrap gap-4 text-xs text-zinc-500 mb-4">
+            <span className="flex items-center gap-1.5">
+              <Monitor size={12} />
+              {editing ? (
+                <input
+                  className="bg-zinc-800 border border-zinc-700 rounded px-2 py-0.5 text-zinc-300 focus:outline-none focus:border-amber-500"
+                  value={editForm.systemAffected}
+                  onChange={e => setEditForm(p => ({ ...p, systemAffected: e.target.value }))}
+                />
+              ) : issue.systemAffected}
+            </span>
+            <span className="flex items-center gap-1.5">
+              <Calendar size={12} />
+              {formatDate(issue.createdAt)}
+            </span>
+            <span className="flex items-center gap-1.5">
+              <Clock size={12} />
+              {formatRelativeTime(issue.createdAt)}
+            </span>
+            {issue.assignee && (
+              <span className="flex items-center gap-1.5">
+                <User size={12} />
+                {editing ? (
+                  <input
+                    className="bg-zinc-800 border border-zinc-700 rounded px-2 py-0.5 text-zinc-300 focus:outline-none focus:border-amber-500"
+                    value={editForm.assignee}
+                    onChange={e => setEditForm(p => ({ ...p, assignee: e.target.value }))}
+                  />
+                ) : issue.assignee}
+              </span>
             )}
           </div>
 
-          {/* Sidebar */}
-          <div className="space-y-4">
-            {/* Meta info */}
-            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-              <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-4">Issue Details</h3>
-              <div className="space-y-3">
-                <div>
-                  <p className="text-xs text-zinc-600 mb-1">Status</p>
-                  <StatusBadge status={issue.status} />
-                </div>
-                <div>
-                  <p className="text-xs text-zinc-600 mb-1">Severity</p>
-                  <SeverityBadge severity={issue.severity} />
-                </div>
-                <div>
-                  <p className="text-xs text-zinc-600 mb-1">System</p>
-                  <p className="text-sm text-zinc-300">{issue.systemAffected}</p>
-                </div>
-                {issue.assignee && (
-                  <div>
-                    <p className="text-xs text-zinc-600 mb-1">Assignee</p>
-                    <p className="text-sm text-zinc-300">{issue.assignee}</p>
-                  </div>
-                )}
-                <div>
-                  <p className="text-xs text-zinc-600 mb-1">Created</p>
-                  <p className="text-sm text-zinc-300">{formatDate(issue.createdAt)}</p>
-                </div>
-                {issue.tags && issue.tags.length > 0 && (
-                  <div>
-                    <p className="text-xs text-zinc-600 mb-2">Tags</p>
-                    <div className="flex flex-wrap gap-1">
-                      {issue.tags.map(tag => <TagBadge key={tag} tag={tag} size="sm" />)}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Master Incident Stats */}
-            {issue.isMasterIncident && (
-              <div className="bg-violet-500/5 border border-violet-500/20 rounded-xl p-5">
-                <div className="flex items-center gap-2 mb-4">
-                  <Star size={14} className="text-violet-400" fill="currentColor" />
-                  <h3 className="text-xs font-semibold text-violet-300 uppercase tracking-wider">Master Incident</h3>
-                </div>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-zinc-500">Linked Incidents</span>
-                    <span className="text-sm font-semibold text-zinc-200">{issue.linkedIncidentCount ?? 0}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-zinc-500">References</span>
-                    <span className="text-sm font-semibold text-zinc-200">{issue.referenceCount ?? 0}</span>
-                  </div>
-                  {issue.lastLinkedAt && (
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs text-zinc-500">Last Linked</span>
-                      <span className="text-xs text-zinc-400">{formatRelativeTime(issue.lastLinkedAt)}</span>
-                    </div>
-                  )}
-                  <div className="pt-2 border-t border-violet-500/20">
-                    <ConfidenceBadge score={confidenceScore} />
-                  </div>
-                </div>
-              </div>
+          {/* Status */}
+          <div className="flex items-center gap-3 mb-4">
+            {editing ? (
+              <select
+                className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1.5 text-zinc-100 text-xs focus:outline-none focus:border-amber-500"
+                value={editForm.status}
+                onChange={e => setEditForm(p => ({ ...p, status: e.target.value as Status }))}
+              >
+                {(['Open','Investigating','Resolved','Closed'] as Status[]).map(s => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            ) : (
+              <StatusBadge status={issue.status} />
             )}
+          </div>
 
-            {/* Actions */}
-            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-              <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">Actions</h3>
-              <div className="space-y-2">
-                {/* Link to Existing Resolution */}
-                {!issue.isMasterIncident && (
+          {/* Tags */}
+          <div className="mb-4">
+            {editing ? (
+              <div>
+                <p className="text-xs text-zinc-500 mb-2">Tags</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {ALL_TAGS.map(tag => (
+                    <TagBadge
+                      key={tag}
+                      tag={tag}
+                      selected={editForm.tags.includes(tag)}
+                      onClick={toggleTag}
+                    />
+                  ))}
+                </div>
+              </div>
+            ) : issue.tags && issue.tags.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {issue.tags.map(tag => <TagBadge key={tag} tag={tag} />)}
+              </div>
+            ) : null}
+          </div>
+
+          {/* Description */}
+          <div className="mb-4">
+            <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <FileText size={11} /> Description
+            </p>
+            {editing ? (
+              <textarea
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-300 text-sm focus:outline-none focus:border-amber-500 min-h-[100px] resize-y"
+                value={editForm.description}
+                onChange={e => setEditForm(p => ({ ...p, description: e.target.value }))}
+              />
+            ) : (
+              <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap">{issue.description}</p>
+            )}
+          </div>
+
+          {/* Edit Actions */}
+          {editing && (
+            <div className="flex items-center gap-2 pt-4 border-t border-zinc-800">
+              <button
+                onClick={handleSave}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-amber-500 text-zinc-900 text-sm font-semibold hover:bg-amber-400 transition-colors"
+              >
+                <Save size={14} /> Save Changes
+              </button>
+              <button
+                onClick={() => { setEditing(false); loadIssue(); }}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-zinc-800 text-zinc-300 text-sm hover:bg-zinc-700 transition-colors border border-zinc-700"
+              >
+                <X size={14} /> Cancel
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Master Incident Controls */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Star size={15} className="text-violet-400" />
+              <h2 className="text-sm font-semibold text-zinc-200">Master Incident</h2>
+            </div>
+            {issue.isMasterIncident ? (
+              <button
+                onClick={handleDemote}
+                className="text-xs px-3 py-1.5 rounded-lg bg-zinc-800 text-zinc-400 hover:bg-zinc-700 border border-zinc-700 transition-colors"
+              >
+                Demote from Master
+              </button>
+            ) : (
+              <button
+                onClick={handlePromote}
+                className="text-xs px-3 py-1.5 rounded-lg bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 border border-violet-500/20 transition-colors"
+              >
+                Promote to Master
+              </button>
+            )}
+          </div>
+
+          {issue.isMasterIncident ? (
+            <div>
+              <div className="flex items-center gap-4 text-xs text-zinc-400 mb-4">
+                <span className="flex items-center gap-1.5">
+                  <Link2 size={11} />
+                  {linkedRelationships.length} linked incident{linkedRelationships.length !== 1 ? 's' : ''}
+                </span>
+                {typeof issue.linkedIncidentCount === 'number' && (
+                  <span className="text-zinc-500">({issue.linkedIncidentCount} total tracked)</span>
+                )}
+              </div>
+              {linkedRelationships.length > 0 ? (
+                <div className="space-y-2">
+                  {linkedRelationships.map(rel => {
+                    const src = allIssues.find(i => i.id === rel.sourceId);
+                    return src ? (
+                      <div
+                        key={rel.id}
+                        className="flex items-center justify-between px-3 py-2 rounded-lg bg-zinc-800/60 border border-zinc-700/50 hover:border-zinc-600 cursor-pointer transition-colors"
+                        onClick={() => navigate(`/issues/${src.id}`)}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-xs font-mono text-zinc-500 shrink-0">{src.id}</span>
+                          <span className="text-xs text-zinc-300 truncate">{src.title}</span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-xs text-zinc-500">{RELATIONSHIP_LABELS[rel.relationshipType]}</span>
+                          <ChevronRight size={12} className="text-zinc-600" />
+                        </div>
+                      </div>
+                    ) : null;
+                  })}
+                </div>
+              ) : (
+                <p className="text-xs text-zinc-500">No linked incidents yet. Other issues can be linked to this master incident.</p>
+              )}
+            </div>
+          ) : (
+            <div>
+              {sourceRelationship && masterIssue ? (
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-zinc-500 mb-1">Linked to master incident:</p>
+                    <button
+                      onClick={() => navigate(`/issues/${masterIssue.id}`)}
+                      className="flex items-center gap-2 text-sm text-violet-400 hover:text-violet-300 transition-colors"
+                    >
+                      <Star size={12} fill="currentColor" />
+                      <span className="font-mono text-xs">{masterIssue.id}</span>
+                      <span className="truncate max-w-xs">{masterIssue.title}</span>
+                      <ChevronRight size={12} />
+                    </button>
+                    <p className="text-xs text-zinc-600 mt-1">{RELATIONSHIP_LABELS[sourceRelationship.relationshipType]}</p>
+                  </div>
+                  <button
+                    onClick={handleUnlink}
+                    className="text-xs px-3 py-1.5 rounded-lg bg-zinc-800 text-zinc-400 hover:bg-zinc-700 border border-zinc-700 transition-colors"
+                  >
+                    Unlink
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-zinc-500">This issue is not linked to any master incident.</p>
                   <button
                     onClick={() => setShowLinkModal(true)}
-                    className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg bg-sky-500/10 border border-sky-500/20 text-sky-400 hover:bg-sky-500/20 text-sm font-medium transition-colors"
+                    className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 border border-blue-500/20 transition-colors"
                   >
-                    <Link2 size={14} />
-                    Link to Existing Resolution
+                    <Link2 size={12} /> Link to Master
                   </button>
-                )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
-                {/* Promote / Demote Master Incident */}
-                {isResolved && !issue.isMasterIncident && (
-                  <button
-                    onClick={handlePromote}
-                    className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg bg-violet-500/10 border border-violet-500/20 text-violet-400 hover:bg-violet-500/20 text-sm font-medium transition-colors"
-                  >
-                    <Star size={14} />
-                    Promote to Master Incident
-                  </button>
-                )}
-                {issue.isMasterIncident && (
-                  <button
-                    onClick={handleDemote}
-                    className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-400 hover:bg-zinc-700 text-sm transition-colors"
-                  >
-                    <Star size={14} />
-                    Remove Master Status
-                  </button>
-                )}
+        {/* Resolutions */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <BookOpen size={15} className="text-amber-400" />
+              <h2 className="text-sm font-semibold text-zinc-200">Resolutions</h2>
+              {issue.resolutions && issue.resolutions.length > 0 && (
+                <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                  {issue.resolutions.length}
+                </span>
+              )}
+            </div>
+            <button
+              onClick={() => setShowResolutionForm(!showResolutionForm)}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border border-amber-500/20 transition-colors"
+            >
+              <Plus size={12} />
+              Add Resolution
+            </button>
+          </div>
 
-                <button
-                  onClick={() => { incrementReferenceCount(id!); loadIssue(); }}
-                  className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-400 hover:bg-zinc-700 text-sm transition-colors"
-                >
-                  <BookOpen size={14} />
-                  Mark as Referenced
-                </button>
+          {showResolutionForm && (
+            <div className="mb-4 p-4 rounded-lg bg-zinc-800/50 border border-zinc-700">
+              <p className="text-xs font-semibold text-zinc-300 mb-3">New Resolution</p>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs text-zinc-500 mb-1 block">Title *</label>
+                  <input
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-200 text-sm focus:outline-none focus:border-amber-500"
+                    placeholder="Resolution title..."
+                    value={resolutionForm.title}
+                    onChange={e => setResolutionForm(p => ({ ...p, title: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-zinc-500 mb-1 block">Steps * (one per line)</label>
+                  <textarea
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-200 text-sm focus:outline-none focus:border-amber-500 min-h-[80px] resize-y"
+                    placeholder="Step 1&#10;Step 2&#10;Step 3"
+                    value={resolutionForm.steps}
+                    onChange={e => setResolutionForm(p => ({ ...p, steps: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-zinc-500 mb-1 block">Notes (optional)</label>
+                  <textarea
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-200 text-sm focus:outline-none focus:border-amber-500 min-h-[60px] resize-y"
+                    placeholder="Additional notes..."
+                    value={resolutionForm.notes}
+                    onChange={e => setResolutionForm(p => ({ ...p, notes: e.target.value }))}
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleAddResolution}
+                    disabled={!resolutionForm.title.trim() || !resolutionForm.steps.trim()}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-amber-500 text-zinc-900 text-xs font-semibold hover:bg-amber-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <Save size={12} /> Save Resolution
+                  </button>
+                  <button
+                    onClick={() => { setShowResolutionForm(false); setResolutionForm({ title: '', steps: '', notes: '' }); }}
+                    className="px-4 py-2 rounded-lg bg-zinc-700 text-zinc-300 text-xs hover:bg-zinc-600 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
+            </div>
+          )}
+
+          {issue.resolutions && issue.resolutions.length > 0 ? (
+            <div className="space-y-3">
+              {issue.resolutions.map((res, idx) => (
+                <div key={res.id ?? idx} className="p-4 rounded-lg bg-zinc-800/40 border border-zinc-700/50">
+                  <div className="flex items-start justify-between mb-2">
+                    <h3 className="text-sm font-semibold text-zinc-200">{res.title}</h3>
+                    <div className="flex items-center gap-2">
+                      {(res.referenceCount ?? 0) > 0 && (
+                        <span className="text-xs text-zinc-500">{res.referenceCount} use{res.referenceCount !== 1 ? 's' : ''}</span>
+                      )}
+                      <button
+                        onClick={() => handleIncrementReference(res.id ?? '')}
+                        className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-zinc-700 text-zinc-400 hover:bg-zinc-600 hover:text-zinc-200 transition-colors"
+                        title="Mark as used"
+                      >
+                        <BookOpen size={10} /> Used
+                      </button>
+                    </div>
+                  </div>
+                  <ol className="space-y-1 mb-2">
+                    {res.steps.map((step, si) => (
+                      <li key={si} className="text-xs text-zinc-400 flex gap-2">
+                        <span className="text-zinc-600 shrink-0">{si + 1}.</span>
+                        <span>{step}</span>
+                      </li>
+                    ))}
+                  </ol>
+                  {res.notes && (
+                    <p className="text-xs text-zinc-500 mt-2 pt-2 border-t border-zinc-700/50 italic">{res.notes}</p>
+                  )}
+                  {res.createdAt && (
+                    <p className="text-xs text-zinc-600 mt-2">{formatRelativeTime(res.createdAt)}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-zinc-500">No resolutions documented yet. Add one to help future troubleshooting.</p>
+          )}
+        </div>
+
+        {/* Confidence Info */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <Shield size={15} className="text-zinc-400" />
+            <h2 className="text-sm font-semibold text-zinc-200">Confidence Score</h2>
+          </div>
+          <div className="flex items-center gap-3 mb-3">
+            <div className="flex-1 h-2 rounded-full bg-zinc-800 overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${
+                  confidenceScore >= 70 ? 'bg-emerald-500' :
+                  confidenceScore >= 40 ? 'bg-amber-500' : 'bg-zinc-500'
+                }`}
+                style={{ width: `${confidenceScore}%` }}
+              />
+            </div>
+            <span className="text-sm font-bold text-zinc-200">{confidenceScore}%</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-zinc-800/50">
+              <span className="text-zinc-500">Resolutions</span>
+              <span className={`font-medium ${ (issue.resolutions?.length ?? 0) > 0 ? 'text-emerald-400' : 'text-zinc-600'}`}>
+                {(issue.resolutions?.length ?? 0) > 0 ? `${issue.resolutions!.length} added` : 'None'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-zinc-800/50">
+              <span className="text-zinc-500">Reference Uses</span>
+              <span className={`font-medium ${ (issue.referenceCount ?? 0) > 0 ? 'text-emerald-400' : 'text-zinc-600'}`}>
+                {issue.referenceCount ?? 0}
+              </span>
+            </div>
+            <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-zinc-800/50">
+              <span className="text-zinc-500">Status</span>
+              <span className={`font-medium ${isResolved ? 'text-emerald-400' : 'text-zinc-400'}`}>
+                {isResolved ? 'Resolved' : 'Active'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-zinc-800/50">
+              <span className="text-zinc-500">Linked Incidents</span>
+              <span className={`font-medium ${ (issue.linkedIncidentCount ?? 0) > 0 ? 'text-violet-400' : 'text-zinc-600'}`}>
+                {issue.linkedIncidentCount ?? 0}
+              </span>
             </div>
           </div>
         </div>
@@ -581,249 +720,80 @@ export const IssueDetail: React.FC = () => {
 
       {/* Link Modal */}
       {showLinkModal && (
-        <LinkResolutionModal
-          currentIssueId={issue.id}
-          onClose={() => setShowLinkModal(false)}
-          onLinked={() => { setShowLinkModal(false); loadIssue(); }}
-        />
-      )}
-    </div>
-  );
-};
-
-// ==================== LinkedIncidentsPanel ====================
-interface LinkedIncidentsPanelProps {
-  masterId: string;
-  relationships: IssueRelationship[];
-  onNavigate: (path: string) => void;
-}
-
-const LinkedIncidentsPanel: React.FC<LinkedIncidentsPanelProps> = ({ masterId, relationships, onNavigate }) => {
-  const linkedIssues = relationships.map(r => ({
-    rel: r,
-    issue: getIssueById(r.source_issue_id)
-  })).filter(x => x.issue !== undefined) as { rel: IssueRelationship; issue: Issue }[];
-
-  return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-      <div className="flex items-center gap-2 mb-4">
-        <Link size={16} className="text-sky-400" />
-        <h3 className="text-sm font-semibold text-zinc-100">Linked Incidents</h3>
-        <span className="ml-auto text-xs bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded-full">{linkedIssues.length}</span>
-      </div>
-      {linkedIssues.length === 0 ? (
-        <p className="text-xs text-zinc-500 py-2">No incidents linked to this master incident yet.</p>
-      ) : (
-        <div className="space-y-2">
-          {linkedIssues.map(({ rel, issue }) => (
-            <div
-              key={rel.id}
-              onClick={() => onNavigate(`/issues/${issue.id}`)}
-              className="flex items-center gap-3 p-3 bg-zinc-800/50 rounded-lg hover:bg-zinc-800 cursor-pointer transition-colors"
-            >
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono text-zinc-500">{issue.id}</span>
-                  <span className="text-xs text-zinc-600">{RELATIONSHIP_LABELS[rel.relationship_type]}</span>
-                </div>
-                <p className="text-sm text-zinc-300 truncate mt-0.5">{issue.title}</p>
-                <p className="text-xs text-zinc-600">Linked {formatRelativeTime(rel.linked_at)} by {rel.linked_by}</p>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-md shadow-2xl">
+            <div className="flex items-center justify-between p-5 border-b border-zinc-800">
+              <div className="flex items-center gap-2">
+                <Link2 size={16} className="text-blue-400" />
+                <h3 className="text-sm font-semibold text-zinc-100">Link to Master Incident</h3>
               </div>
-              <ChevronRight size={14} className="text-zinc-600" />
+              <button
+                onClick={() => { setShowLinkModal(false); setSelectedLinkTarget(''); setLinkSearch(''); }}
+                className="text-zinc-500 hover:text-zinc-300 transition-colors"
+              >
+                <X size={16} />
+              </button>
             </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
-
-// ==================== LinkResolutionModal ====================
-interface LinkResolutionModalProps {
-  currentIssueId: string;
-  onClose: () => void;
-  onLinked: () => void;
-}
-
-const LinkResolutionModal: React.FC<LinkResolutionModalProps> = ({ currentIssueId, onClose, onLinked }) => {
-  const [search, setSearch] = useState('');
-  const [selectedMaster, setSelectedMaster] = useState<Issue | null>(null);
-  const [relationshipType, setRelationshipType] = useState<RelationshipType>('similar');
-  const [linkedBy, setLinkedBy] = useState('');
-  const [results, setResults] = useState<Issue[]>([]);
-  const [promoteMode, setPromoteMode] = useState(false);
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    const all = getAllIssues();
-    const resolved = all.filter(i =>
-      (i.status === 'Resolved' || i.status === 'Closed') &&
-      i.id !== currentIssueId
-    );
-    if (search.trim().length === 0) {
-      setResults(resolved.filter(i => i.isMasterIncident).slice(0, 8));
-    } else {
-      const q = search.toLowerCase();
-      setResults(
-        resolved.filter(i =>
-          i.title.toLowerCase().includes(q) ||
-          i.systemAffected.toLowerCase().includes(q) ||
-          (i.resolution?.rootCause?.toLowerCase().includes(q) ?? false)
-        ).slice(0, 8)
-      );
-    }
-  }, [search, currentIssueId]);
-
-  const handleLink = () => {
-    if (!selectedMaster) return;
-    const by = linkedBy.trim() || 'Technician';
-    linkIssueToMaster(currentIssueId, selectedMaster.id, relationshipType, by);
-    onLinked();
-  };
-
-  const handlePromoteAndLink = () => {
-    const current = getIssueById(currentIssueId);
-    if (!current) return;
-    promoteToMasterIncident(currentIssueId);
-    onLinked();
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-      <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl">
-        <div className="flex items-center justify-between p-5 border-b border-zinc-800">
-          <div>
-            <h2 className="text-base font-semibold text-zinc-100">Link to Existing Resolution</h2>
-            <p className="text-xs text-zinc-500 mt-0.5">Search resolved issues and master incidents</p>
-          </div>
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 transition-colors">
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-auto p-5 space-y-4">
-          {!promoteMode ? (
-            <>
-              <div className="relative">
-                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+            <div className="p-5">
+              <div className="relative mb-3">
+                <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
                 <input
-                  type="text"
-                  placeholder="Search by title, system, or root cause..."
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg pl-9 pr-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-amber-500"
-                  autoFocus
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg pl-8 pr-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-amber-500"
+                  placeholder="Search master incidents..."
+                  value={linkSearch}
+                  onChange={e => setLinkSearch(e.target.value)}
                 />
               </div>
-
-              <div className="space-y-2">
-                {results.length === 0 && (
-                  <p className="text-xs text-zinc-500 text-center py-4">No matching resolved issues found.</p>
-                )}
-                {results.map(r => (
+              <div className="mb-3">
+                <label className="text-xs text-zinc-500 mb-1 block">Relationship Type</label>
+                <select
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-200 text-sm focus:outline-none focus:border-amber-500"
+                  value={selectedRelType}
+                  onChange={e => setSelectedRelType(e.target.value as RelationshipType)}
+                >
+                  {(Object.keys(RELATIONSHIP_LABELS) as RelationshipType[]).map(rt => (
+                    <option key={rt} value={rt}>{RELATIONSHIP_LABELS[rt]}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="max-h-48 overflow-y-auto space-y-1.5 mb-4">
+                {linkableMasters.length === 0 ? (
+                  <p className="text-xs text-zinc-500 text-center py-4">No master incidents found.</p>
+                ) : linkableMasters.map(mi => (
                   <div
-                    key={r.id}
-                    onClick={() => setSelectedMaster(r)}
-                    className={`p-3 rounded-lg border cursor-pointer transition-all ${
-                      selectedMaster?.id === r.id
-                        ? 'border-amber-500/50 bg-amber-500/5'
-                        : 'border-zinc-800 bg-zinc-800/50 hover:border-zinc-600'
+                    key={mi.id}
+                    onClick={() => setSelectedLinkTarget(mi.id)}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-colors border ${
+                      selectedLinkTarget === mi.id
+                        ? 'bg-blue-500/15 border-blue-500/40 text-blue-300'
+                        : 'bg-zinc-800/50 border-zinc-700/50 hover:border-zinc-600 text-zinc-300'
                     }`}
                   >
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs font-mono text-zinc-500">{r.id}</span>
-                      {r.isMasterIncident && (
-                        <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full bg-violet-500/15 text-violet-400 border border-violet-500/25">
-                          <Star size={9} fill="currentColor" /> Master
-                        </span>
-                      )}
-                      {r.confidenceScore !== undefined && (
-                        <ConfidenceBadge score={r.confidenceScore} size="sm" />
-                      )}
-                    </div>
-                    <p className="text-sm text-zinc-200">{r.title}</p>
-                    {r.resolution?.rootCause && (
-                      <p className="text-xs text-zinc-500 mt-1 line-clamp-2">{r.resolution.rootCause}</p>
-                    )}
-                    <div className="flex items-center gap-3 mt-1">
-                      <span className="text-xs text-zinc-600">{r.systemAffected}</span>
-                      {(r.linkedIncidentCount ?? 0) > 0 && (
-                        <span className="text-xs text-zinc-600">
-                          <Link size={9} className="inline mr-0.5" />{r.linkedIncidentCount} linked
-                        </span>
-                      )}
-                    </div>
+                    <Star size={10} className="text-violet-400 shrink-0" fill="currentColor" />
+                    <span className="text-xs font-mono text-zinc-500 shrink-0">{mi.id}</span>
+                    <span className="text-xs truncate">{mi.title}</span>
                   </div>
                 ))}
               </div>
-
-              {selectedMaster && (
-                <div className="space-y-3 pt-2 border-t border-zinc-800">
-                  <div>
-                    <label className="text-xs text-zinc-500 mb-1.5 block">Relationship Type</label>
-                    <select
-                      value={relationshipType}
-                      onChange={e => setRelationshipType(e.target.value as RelationshipType)}
-                      className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-amber-500"
-                    >
-                      <option value="duplicate">Duplicate</option>
-                      <option value="similar">Similar Issue</option>
-                      <option value="derived_from">Derived From</option>
-                      <option value="confirmed_same_root_cause">Same Root Cause</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs text-zinc-500 mb-1.5 block">Your Name</label>
-                    <input
-                      type="text"
-                      placeholder="Technician name"
-                      value={linkedBy}
-                      onChange={e => setLinkedBy(e.target.value)}
-                      className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-amber-500"
-                    />
-                  </div>
-                  <button
-                    onClick={handleLink}
-                    className="w-full bg-amber-400 hover:bg-amber-300 text-zinc-900 font-semibold text-sm py-2.5 rounded-lg transition-colors"
-                  >
-                    Confirm Link
-                  </button>
-                </div>
-              )}
-
-              <div className="pt-3 border-t border-zinc-800">
-                <p className="text-xs text-zinc-500 mb-2">No good match found?</p>
+              <div className="flex gap-2">
                 <button
-                  onClick={() => setPromoteMode(true)}
-                  className="flex items-center gap-2 text-sm text-violet-400 hover:text-violet-300 transition-colors"
+                  onClick={handleLink}
+                  disabled={!selectedLinkTarget}
+                  className="flex-1 py-2 rounded-lg bg-blue-500 text-white text-sm font-semibold hover:bg-blue-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  <Star size={14} /> Promote this issue as a new Master Incident
-                </button>
-              </div>
-            </>
-          ) : (
-            <div className="text-center py-8">
-              <Star size={40} className="text-violet-400 mx-auto mb-4" fill="currentColor" />
-              <h3 className="text-base font-semibold text-zinc-100 mb-2">Promote as Master Incident</h3>
-              <p className="text-sm text-zinc-400 mb-6">This will mark the current issue as a Master Incident, making it a reference for future similar issues.</p>
-              <div className="flex gap-3 justify-center">
-                <button
-                  onClick={handlePromoteAndLink}
-                  className="bg-violet-500 hover:bg-violet-400 text-white font-semibold text-sm px-5 py-2.5 rounded-lg transition-colors"
-                >
-                  Promote to Master Incident
+                  Link Issue
                 </button>
                 <button
-                  onClick={() => setPromoteMode(false)}
-                  className="border border-zinc-700 text-zinc-300 hover:bg-zinc-800 text-sm px-5 py-2.5 rounded-lg transition-colors"
+                  onClick={() => { setShowLinkModal(false); setSelectedLinkTarget(''); setLinkSearch(''); }}
+                  className="px-4 py-2 rounded-lg bg-zinc-800 text-zinc-300 text-sm hover:bg-zinc-700 border border-zinc-700 transition-colors"
                 >
-                  Back
+                  Cancel
                 </button>
               </div>
             </div>
-          )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };
