@@ -4,7 +4,7 @@ import { Issue } from '../types';
 import { StatusBadge } from './StatusBadge';
 import { SeverityBadge } from './SeverityBadge';
 import { formatRelativeTime } from '../lib/utils';
-import { ArrowUpDown } from 'lucide-react';
+import { ArrowUpDown, CheckCircle2 } from 'lucide-react';
 
 interface IssueTableProps {
   issues: Issue[];
@@ -37,37 +37,43 @@ export const IssueTable: React.FC<IssueTableProps> = ({ issues }) => {
           </tr>
         </thead>
         <tbody className="divide-y divide-zinc-800/60">
-          {issues.map(issue => (
-            <tr
-              key={issue.id}
-              onClick={() => navigate(`/issues/${issue.id}`)}
-              className="hover:bg-zinc-800/40 cursor-pointer transition-colors group"
-            >
-              <td className="py-3.5 px-4">
-                <span className="text-xs font-mono text-zinc-500">{issue.id}</span>
-              </td>
-              <td className="py-3.5 px-4">
-                <div>
-                  <p className="text-sm font-medium text-zinc-100 group-hover:text-white">{issue.title}</p>
-                  {issue.assignee && (
-                    <p className="text-xs text-zinc-500 mt-0.5">{issue.assignee}</p>
-                  )}
-                </div>
-              </td>
-              <td className="py-3.5 px-4">
-                <span className="text-xs text-zinc-400">{issue.systemAffected}</span>
-              </td>
-              <td className="py-3.5 px-4">
-                <SeverityBadge severity={issue.severity} size="sm" />
-              </td>
-              <td className="py-3.5 px-4">
-                <StatusBadge status={issue.status} size="sm" />
-              </td>
-              <td className="py-3.5 px-4">
-                <span className="text-xs text-zinc-500">{formatRelativeTime(issue.createdAt)}</span>
-              </td>
-            </tr>
-          ))}
+          {issues.map(issue => {
+            const isResolved = issue.status === 'Resolved' || issue.status === 'Closed';
+            return (
+              <tr
+                key={issue.id}
+                onClick={() => navigate(`/issues/${issue.id}`)}
+                className="hover:bg-zinc-800/40 cursor-pointer transition-colors group"
+              >
+                <td className="py-3.5 px-4">
+                  <span className="text-xs font-mono text-zinc-500">{issue.id}</span>
+                </td>
+                <td className="py-3.5 px-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-zinc-200 group-hover:text-white transition-colors font-medium">{issue.title}</span>
+                    {isResolved && (
+                      <span className="inline-flex items-center gap-1 rounded-full text-xs px-2 py-0.5 font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 whitespace-nowrap">
+                        <CheckCircle2 size={10} />
+                        Resolved
+                      </span>
+                    )}
+                  </div>
+                </td>
+                <td className="py-3.5 px-4">
+                  <span className="text-xs text-zinc-500">{issue.systemAffected}</span>
+                </td>
+                <td className="py-3.5 px-4">
+                  <SeverityBadge severity={issue.severity} size="sm" />
+                </td>
+                <td className="py-3.5 px-4">
+                  <StatusBadge status={issue.status} size="sm" />
+                </td>
+                <td className="py-3.5 px-4">
+                  <span className="text-xs text-zinc-500">{formatRelativeTime(issue.createdAt)}</span>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
