@@ -1,6 +1,5 @@
 import React from 'react';
 import { LucideIcon } from 'lucide-react';
-import { useTheme } from '../context/ThemeContext';
 
 interface KPICardProps {
   title: string;
@@ -21,23 +20,12 @@ export const KPICard: React.FC<KPICardProps> = ({
   iconBg = 'bg-amber-400/10',
   trend
 }) => {
-  const { theme } = useTheme();
-  const isDark = theme === 'dark';
-
   return (
-    <div className={`border rounded-xl p-5 flex flex-col gap-4 transition-colors ${
-      isDark
-        ? 'bg-zinc-900 border-zinc-800 hover:border-zinc-700'
-        : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'
-    }`}>
+    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 flex flex-col gap-4 hover:border-zinc-700 transition-colors">
       <div className="flex items-start justify-between">
         <div className="flex flex-col gap-1">
-          <span className={`text-xs font-medium uppercase tracking-wider ${
-            isDark ? 'text-zinc-500' : 'text-slate-400'
-          }`}>{title}</span>
-          <span className={`text-3xl font-bold ${
-            isDark ? 'text-zinc-100' : 'text-slate-800'
-          }`}>{value}</span>
+          <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">{title}</span>
+          <span className="text-3xl font-bold text-zinc-100">{value}</span>
         </div>
         <div className={`p-2.5 rounded-lg ${iconBg}`}>
           <Icon size={20} className={iconColor} />
@@ -50,9 +38,7 @@ export const KPICard: React.FC<KPICardProps> = ({
               {trend.positive ? '↑' : '↓'} {trend.value}
             </span>
           )}
-          {subtitle && <span className={`text-xs ${
-            isDark ? 'text-zinc-500' : 'text-slate-400'
-          }`}>{subtitle}</span>}
+          {subtitle && <span className="text-xs text-zinc-500">{subtitle}</span>}
         </div>
       )}
     </div>

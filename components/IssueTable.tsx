@@ -7,7 +7,6 @@ import { TagBadge } from './TagBadge';
 import { ConfidenceBadge } from './ConfidenceBadge';
 import { formatRelativeTime } from '../lib/utils';
 import { ArrowUpDown, CheckCircle2, Star, Link } from 'lucide-react';
-import { useTheme } from '../context/ThemeContext';
 
 interface IssueTableProps {
   issues: Issue[];
@@ -15,15 +14,11 @@ interface IssueTableProps {
 
 export const IssueTable: React.FC<IssueTableProps> = ({ issues }) => {
   const navigate = useNavigate();
-  const { theme } = useTheme();
-  const isDark = theme === 'dark';
 
   if (issues.length === 0) {
     return (
       <div className="text-center py-20">
-        <p className={`text-sm ${
-          isDark ? 'text-zinc-500' : 'text-slate-400'
-        }`}>No issues found matching your filters.</p>
+        <p className="text-zinc-500 text-sm">No issues found matching your filters.</p>
       </div>
     );
   }
@@ -32,52 +27,30 @@ export const IssueTable: React.FC<IssueTableProps> = ({ issues }) => {
     <div className="overflow-x-auto">
       <table className="w-full min-w-[800px]">
         <thead>
-          <tr className={`border-b ${
-            isDark ? 'border-zinc-800' : 'border-slate-200'
-          }`}>
-            <th className={`text-left text-xs font-medium uppercase tracking-wider pb-3 px-4 w-24 ${
-              isDark ? 'text-zinc-500' : 'text-slate-400'
-            }`}>
+          <tr className="border-b border-zinc-800">
+            <th className="text-left text-xs font-medium text-zinc-500 uppercase tracking-wider pb-3 px-4 w-24">
               <span className="flex items-center gap-1">ID <ArrowUpDown size={10} /></span>
             </th>
-            <th className={`text-left text-xs font-medium uppercase tracking-wider pb-3 px-4 ${
-              isDark ? 'text-zinc-500' : 'text-slate-400'
-            }`}>Title</th>
-            <th className={`text-left text-xs font-medium uppercase tracking-wider pb-3 px-4 ${
-              isDark ? 'text-zinc-500' : 'text-slate-400'
-            }`}>Tags</th>
-            <th className={`text-left text-xs font-medium uppercase tracking-wider pb-3 px-4 ${
-              isDark ? 'text-zinc-500' : 'text-slate-400'
-            }`}>System</th>
-            <th className={`text-left text-xs font-medium uppercase tracking-wider pb-3 px-4 ${
-              isDark ? 'text-zinc-500' : 'text-slate-400'
-            }`}>Severity</th>
-            <th className={`text-left text-xs font-medium uppercase tracking-wider pb-3 px-4 ${
-              isDark ? 'text-zinc-500' : 'text-slate-400'
-            }`}>Status</th>
-            <th className={`text-left text-xs font-medium uppercase tracking-wider pb-3 px-4 ${
-              isDark ? 'text-zinc-500' : 'text-slate-400'
-            }`}>Created</th>
+            <th className="text-left text-xs font-medium text-zinc-500 uppercase tracking-wider pb-3 px-4">Title</th>
+            <th className="text-left text-xs font-medium text-zinc-500 uppercase tracking-wider pb-3 px-4">Tags</th>
+            <th className="text-left text-xs font-medium text-zinc-500 uppercase tracking-wider pb-3 px-4">System</th>
+            <th className="text-left text-xs font-medium text-zinc-500 uppercase tracking-wider pb-3 px-4">Severity</th>
+            <th className="text-left text-xs font-medium text-zinc-500 uppercase tracking-wider pb-3 px-4">Status</th>
+            <th className="text-left text-xs font-medium text-zinc-500 uppercase tracking-wider pb-3 px-4">Created</th>
           </tr>
         </thead>
-        <tbody className={`divide-y ${
-          isDark ? 'divide-zinc-800/60' : 'divide-slate-100'
-        }`}>
+        <tbody className="divide-y divide-zinc-800/60">
           {issues.map(issue => {
             const isResolved = issue.status === 'Resolved' || issue.status === 'Closed';
             return (
               <tr
                 key={issue.id}
                 onClick={() => navigate(`/issues/${issue.id}`)}
-                className={`cursor-pointer transition-colors group ${
-                  isDark ? 'hover:bg-zinc-800/40' : 'hover:bg-slate-50'
-                }`}
+                className="cursor-pointer hover:bg-zinc-800/40 transition-colors group"
               >
                 <td className="py-3.5 px-4">
                   <div className="flex items-center gap-1.5">
-                    <span className={`text-xs font-mono ${
-                      isDark ? 'text-zinc-500' : 'text-slate-400'
-                    }`}>{issue.id}</span>
+                    <span className="text-xs font-mono text-zinc-500">{issue.id}</span>
                     {issue.isMasterIncident && (
                       <Star size={10} className="text-violet-400" fill="currentColor" />
                     )}
@@ -85,9 +58,7 @@ export const IssueTable: React.FC<IssueTableProps> = ({ issues }) => {
                 </td>
                 <td className="py-3.5 px-4">
                   <div className="flex items-center gap-2">
-                    <span className={`text-sm font-medium max-w-xs truncate ${
-                      isDark ? 'text-zinc-200 group-hover:text-white' : 'text-slate-700 group-hover:text-slate-900'
-                    }`}>
+                    <span className="text-sm text-zinc-200 group-hover:text-white font-medium max-w-xs truncate">
                       {issue.title}
                     </span>
                     {isResolved && issue.resolution && (
@@ -111,16 +82,12 @@ export const IssueTable: React.FC<IssueTableProps> = ({ issues }) => {
                       <TagBadge key={tag} tag={tag} size="sm" />
                     ))}
                     {issue.tags && issue.tags.length > 2 && (
-                      <span className={`text-xs ${
-                        isDark ? 'text-zinc-600' : 'text-slate-400'
-                      }`}>+{issue.tags.length - 2}</span>
+                      <span className="text-xs text-zinc-600">+{issue.tags.length - 2}</span>
                     )}
                   </div>
                 </td>
                 <td className="py-3.5 px-4">
-                  <span className={`text-xs ${
-                    isDark ? 'text-zinc-400' : 'text-slate-500'
-                  }`}>{issue.systemAffected}</span>
+                  <span className="text-xs text-zinc-400">{issue.systemAffected}</span>
                 </td>
                 <td className="py-3.5 px-4">
                   <SeverityBadge severity={issue.severity} size="sm" />
@@ -129,9 +96,7 @@ export const IssueTable: React.FC<IssueTableProps> = ({ issues }) => {
                   <StatusBadge status={issue.status} size="sm" />
                 </td>
                 <td className="py-3.5 px-4">
-                  <span className={`text-xs ${
-                    isDark ? 'text-zinc-500' : 'text-slate-400'
-                  }`}>{formatRelativeTime(issue.createdAt)}</span>
+                  <span className="text-xs text-zinc-500">{formatRelativeTime(issue.createdAt)}</span>
                 </td>
               </tr>
             );

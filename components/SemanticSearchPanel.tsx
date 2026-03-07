@@ -4,7 +4,6 @@ import { semanticSearch, SemanticMatch } from '../lib/semanticSearch';
 import { SemanticMatchCard } from './SemanticMatchCard';
 import { Search, X, Loader2, Lightbulb } from 'lucide-react';
 import { Issue } from '../types';
-import { useTheme } from '../context/ThemeContext';
 
 interface SemanticSearchPanelProps {
   query?: string;
@@ -31,8 +30,6 @@ export const SemanticSearchPanel: React.FC<SemanticSearchPanelProps> = ({
   const [searched, setSearched] = useState(false);
   const [allIssues, setAllIssues] = useState<Issue[]>([]);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { theme } = useTheme();
-  const isDark = theme === 'dark';
 
   const effectiveQuery = externalQuery !== undefined ? externalQuery : internalQuery;
 
@@ -82,32 +79,22 @@ export const SemanticSearchPanel: React.FC<SemanticSearchPanelProps> = ({
     <div className="flex flex-col gap-3">
       {!isControlled && (
         <div>
-          <label className={`block text-xs font-medium mb-1.5 ${
-            isDark ? 'text-zinc-400' : 'text-slate-600'
-          }`}>{label}</label>
+          <label className="block text-xs font-medium text-zinc-400 mb-1.5">{label}</label>
           <div className="flex gap-2">
             <div className="relative flex-1">
-              <Search size={14} className={`absolute left-3 top-1/2 -translate-y-1/2 ${
-                isDark ? 'text-zinc-500' : 'text-slate-400'
-              }`} />
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
               <input
                 type="text"
                 value={internalQuery}
                 onChange={e => setInternalQuery(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') handleManualSearch(); }}
                 placeholder={placeholder}
-                className={`w-full border rounded-lg pl-9 pr-9 py-2 text-sm focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 ${
-                  isDark
-                    ? 'bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500'
-                    : 'bg-white border-slate-300 text-slate-800 placeholder:text-slate-400'
-                }`}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg pl-9 pr-9 py-2 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20"
               />
               {internalQuery && (
                 <button
                   onClick={() => { setInternalQuery(''); setResults([]); setSearched(false); }}
-                  className={`absolute right-3 top-1/2 -translate-y-1/2 ${
-                    isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-slate-400 hover:text-slate-600'
-                  }`}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
                 >
                   <X size={12} />
                 </button>
@@ -125,36 +112,26 @@ export const SemanticSearchPanel: React.FC<SemanticSearchPanelProps> = ({
       )}
 
       {loading && (
-        <div className={`flex items-center gap-2 text-sm py-2 ${
-          isDark ? 'text-zinc-500' : 'text-slate-400'
-        }`}>
+        <div className="flex items-center gap-2 text-zinc-500 text-sm py-2">
           <Loader2 size={14} className="animate-spin" />
           Finding similar issues...
         </div>
       )}
 
       {!loading && searched && results.length === 0 && (
-        <div className="text-center py-6 text-sm">
-          <Lightbulb size={20} className={`mx-auto mb-2 ${
-            isDark ? 'text-zinc-600' : 'text-slate-300'
-          }`} />
-          <span className={isDark ? 'text-zinc-500' : 'text-slate-400'}>
-            No similar issues found. This may be a new type of problem.
-          </span>
+        <div className="text-center py-6 text-zinc-500 text-sm">
+          <Lightbulb size={20} className="mx-auto mb-2 text-zinc-600" />
+          No similar issues found. This may be a new type of problem.
         </div>
       )}
 
       {!loading && results.length > 0 && (
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
-            <span className={`text-xs font-medium ${
-              isDark ? 'text-zinc-500' : 'text-slate-500'
-            }`}>
+            <span className="text-xs text-zinc-500 font-medium">
               {results.length} similar issue{results.length !== 1 ? 's' : ''} found
             </span>
-            <span className={`text-xs ${
-              isDark ? 'text-zinc-600' : 'text-slate-400'
-            }`}>Ranked by relevance</span>
+            <span className="text-xs text-zinc-600">Ranked by relevance</span>
           </div>
           {results.map((match, i) => (
             <SemanticMatchCard
