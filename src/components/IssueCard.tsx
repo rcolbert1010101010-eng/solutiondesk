@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Issue } from '../types';
 import { StatusBadge } from './StatusBadge';
 import { SeverityBadge } from './SeverityBadge';
+import { TagBadge } from './TagBadge';
 import { formatRelativeTime } from '../lib/utils';
 import { Monitor, Clock, User, CheckCircle2 } from 'lucide-react';
 
@@ -34,7 +35,14 @@ export const IssueCard: React.FC<IssueCardProps> = ({ issue }) => {
         </div>
         <SeverityBadge severity={issue.severity} size="sm" />
       </div>
-      <p className="text-xs text-zinc-500 line-clamp-2 mb-4">{issue.description}</p>
+      <p className="text-xs text-zinc-500 line-clamp-2 mb-3">{issue.description}</p>
+      {issue.tags && issue.tags.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-3" onClick={e => e.stopPropagation()}>
+          {issue.tags.map(tag => (
+            <TagBadge key={tag} tag={tag} size="sm" />
+          ))}
+        </div>
+      )}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-3">
           <StatusBadge status={issue.status} size="sm" />

@@ -1,4 +1,4 @@
-import { Issue, Status, Severity, Resolution } from '../types';
+import { Issue, Status, Severity, Resolution, Tag } from '../types';
 
 const STORAGE_KEY = 'resolution_desk_issues';
 
@@ -11,7 +11,8 @@ const defaultIssues: Issue[] = [
     severity: 'High',
     status: 'Investigating',
     createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-    assignee: 'Sarah Chen'
+    assignee: 'Sarah Chen',
+    tags: ['network', 'timeout']
   },
   {
     id: 'ISS-002',
@@ -21,7 +22,8 @@ const defaultIssues: Issue[] = [
     severity: 'Critical',
     status: 'Open',
     createdAt: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
-    assignee: 'Marcus Webb'
+    assignee: 'Marcus Webb',
+    tags: ['api', 'deployment']
   },
   {
     id: 'ISS-003',
@@ -30,7 +32,8 @@ const defaultIssues: Issue[] = [
     systemAffected: 'Active Directory / Identity',
     severity: 'High',
     status: 'Open',
-    createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString()
+    createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+    tags: ['authentication', 'permissions']
   },
   {
     id: 'ISS-004',
@@ -40,39 +43,66 @@ const defaultIssues: Issue[] = [
     severity: 'Medium',
     status: 'Investigating',
     createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-    assignee: 'Sarah Chen'
+    assignee: 'Jordan Park',
+    tags: ['permissions', 'deployment']
   },
   {
     id: 'ISS-005',
-    title: 'ERP system slow performance during peak hours',
-    description: 'The SAP ERP system is experiencing significant slowdowns between 9 AM and 11 AM. Report generation is timing out and order processing is taking 3-4x longer than normal.',
+    title: 'ERP system slow performance during month-end processing',
+    description: 'The SAP ERP system is responding very slowly during month-end financial processing. Batch jobs that normally take 2 hours are taking 8+ hours, blocking the finance team.',
     systemAffected: 'ERP / SAP',
-    severity: 'Medium',
+    severity: 'High',
     status: 'Open',
     createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-    assignee: 'James Liu'
+    tags: ['database', 'timeout']
   },
   {
     id: 'ISS-006',
-    title: 'Customer portal login failures after SSL certificate update',
-    description: 'Following the SSL certificate renewal last night, approximately 15% of customers are unable to log into the web portal. The error shown is a certificate mismatch warning.',
+    title: 'Customer portal login page throwing 500 errors',
+    description: 'The public-facing customer portal login page is intermittently throwing 500 Internal Server errors. Approximately 15% of login attempts are failing.',
     systemAffected: 'Web / Customer Portal',
     severity: 'Critical',
     status: 'Resolved',
     createdAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(),
-    assignee: 'Marcus Webb',
-    resolution: 'Updated intermediate certificate chain on load balancer and cleared CDN cache. All customers can now log in successfully.'
+    assignee: 'Alex Rivera',
+    resolution: 'Identified a memory leak in the authentication middleware. Patched and redeployed.',
+    resolutionDetails: {
+      rootCause: 'Memory leak in authentication middleware caused by unclosed database connections.',
+      stepsTaken: 'Analyzed server logs, identified the faulty middleware, patched connection pooling logic.',
+      finalResolution: 'Deployed patched version v2.3.1 to production. Memory usage stabilized.',
+      preventionNotes: 'Added automated memory monitoring alerts. Code review checklist updated.',
+      resolvedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString()
+    },
+    tags: ['authentication', 'api', 'database']
   },
   {
     id: 'ISS-007',
-    title: 'Network printer offline in Building B floor 3',
-    description: 'The HP LaserJet Pro on floor 3 of Building B is showing as offline. Users on that floor are unable to print and are walking to other floors to use printers.',
-    systemAffected: 'Printing / Hardware',
-    severity: 'Low',
-    status: 'Closed',
+    title: 'Backup jobs failing on primary file server',
+    description: 'Nightly backup jobs for the primary file server have been failing for 3 consecutive nights. Last successful backup was 72 hours ago, creating a significant data protection gap.',
+    systemAffected: 'Backup / Storage',
+    severity: 'High',
+    status: 'Open',
     createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-    assignee: 'Tom Bradley',
-    resolution: 'Printer IP address had changed due to DHCP lease expiration. Updated printer configuration with static IP assignment.'
+    tags: ['network', 'deployment']
+  },
+  {
+    id: 'ISS-008',
+    title: 'Printer fleet offline after network switch replacement',
+    description: 'All 24 network printers in Building B went offline following the replacement of the core network switch. The new switch configuration may not match the previous VLAN setup.',
+    systemAffected: 'Printing / Hardware',
+    severity: 'Medium',
+    status: 'Resolved',
+    createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+    assignee: 'Sarah Chen',
+    resolution: 'Reconfigured VLAN settings on new switch to match previous configuration.',
+    resolutionDetails: {
+      rootCause: 'New switch deployed with default VLAN configuration, missing printer VLAN 30.',
+      stepsTaken: 'Reviewed old switch config backup, identified missing VLANs, reconfigured new switch.',
+      finalResolution: 'Added VLAN 30 to new switch and updated port assignments. All printers online.',
+      preventionNotes: 'Created switch configuration documentation. Change management process updated.',
+      resolvedAt: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString()
+    },
+    tags: ['network', 'deployment']
   }
 ];
 
@@ -80,12 +110,16 @@ function loadIssues(): Issue[] {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
-      return JSON.parse(stored) as Issue[];
+      const parsed: Issue[] = JSON.parse(stored);
+      // Migrate old issues that lack tags
+      return parsed.map(issue => ({
+        ...issue,
+        tags: issue.tags ?? []
+      }));
     }
   } catch {
     // ignore
   }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(defaultIssues));
   return defaultIssues;
 }
 
@@ -104,44 +138,39 @@ export function getIssueById(id: string): Issue | undefined {
 export function createIssue(data: Omit<Issue, 'id' | 'createdAt'>): Issue {
   const issues = loadIssues();
   const num = issues.length + 1;
+  const id = `ISS-${String(num).padStart(3, '0')}`;
   const newIssue: Issue = {
     ...data,
-    id: `ISS-${String(num).padStart(3, '0')}`,
-    createdAt: new Date().toISOString()
+    id,
+    createdAt: new Date().toISOString(),
+    tags: data.tags ?? []
   };
-  issues.unshift(newIssue);
-  saveIssues(issues);
+  saveIssues([...issues, newIssue]);
   return newIssue;
 }
 
 export function updateIssue(id: string, updates: Partial<Issue>): Issue | undefined {
   const issues = loadIssues();
-  const idx = issues.findIndex(i => i.id === id);
-  if (idx === -1) return undefined;
-  issues[idx] = { ...issues[idx], ...updates };
+  const index = issues.findIndex(i => i.id === id);
+  if (index === -1) return undefined;
+  const updated = { ...issues[index], ...updates };
+  issues[index] = updated;
   saveIssues(issues);
-  return issues[idx];
+  return updated;
 }
 
 export function deleteIssue(id: string): boolean {
   const issues = loadIssues();
-  const idx = issues.findIndex(i => i.id === id);
-  if (idx === -1) return false;
-  issues.splice(idx, 1);
-  saveIssues(issues);
+  const filtered = issues.filter(i => i.id !== id);
+  if (filtered.length === issues.length) return false;
+  saveIssues(filtered);
   return true;
 }
 
-export function addResolution(id: string, resolutionData: Resolution): Issue | undefined {
-  const issues = loadIssues();
-  const idx = issues.findIndex(i => i.id === id);
-  if (idx === -1) return undefined;
-  issues[idx] = {
-    ...issues[idx],
-    resolutionData,
-    resolution: resolutionData.finalResolution,
-    status: 'Resolved'
-  };
-  saveIssues(issues);
-  return issues[idx];
+export function addResolution(id: string, resolution: Resolution): Issue | undefined {
+  return updateIssue(id, {
+    resolutionDetails: resolution,
+    status: 'Resolved',
+    resolution: resolution.finalResolution
+  });
 }
