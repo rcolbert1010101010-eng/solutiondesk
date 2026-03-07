@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Forge App</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    <!-- Forge Visual Editor Bridge — injected by forge-server -->
+    <script>
+    (function(){
+      var style=null, active=false, hovered=null, selected=null;
+      function getSelector(el){
+        if(!el||el===document.body)return'body';
+        var parts=[],cur=el;
+        while(cur&&cur!==document.body){
+          var part=cur.tagName.toLowerCase();
+          if(cur.id){part+='#'+cur.id;parts.unshift(part);break;}
+          if(cur.className&&typeof cur.className==='string'){
+            var cls=cur.className.trim().split(/\s+/).filter(function(c){return !c.startsWith('__fve');}).slice(0,2).join('.');
+            if(cls)part+='.'+cls;
+          }
+          var sibs=cur.parentElement?Array.from(cur.parentElement.children).filter(function(c){return c.tagName===cur.tagName;}) :[];
+          if(sibs.length>1)part+=':nth-of-type('+(sibs.indexOf(cur)+1)+')';
+          parts.unshift(part);cur=cur.parentElement;
+        }
+        return parts.slice(-4).join(' > ');
+      }
+      function getInfo(el){
+        var cs=window.getComputedStyle(el);
+        return{tag:el.tagName.toLowerCase(),id:el.id||'',
+          classes:(typeof el.className==='string'?el.className:'').replace(/__fve\w*/g,'').trim(),
+          text:el.childNodes.length===1&&el.childNodes[0].nodeType===3?el.textContent.trim():'',
+          selector:getSelector(el),
+          styles:{color:cs.color,background:cs.backgroundColor,fontSize:cs.fontSize,
+            fontWeight:cs.fontWeight,padding:cs.padding,margin:cs.margin,
+            borderRadius:cs.borderRadius,opacity:cs.opacity,textAlign:cs.textAlign}};
+      }
+      function onMouseOver(e){
+        if(!active)return;
+        if(hovered&&hovered!==selected)hovered.classList.remove('__fve_h');
+        hovered=e.target;
+        if(hovered!==selected)hovered.classList.add('__fve_h');
+      }
+      function onMouseOut(e){
+        if(!active)return;
+        if(hovered&&hovered!==selected)hovered.classList.remove('__fve_h');
+      }
+      function onClick(e){
+        if(!active)return;
+        e.preventDefault();e.stopPropagation();
+        if(selected){selected.classList.remove('__fve_s');selected.classList.remove('__fve_h');}
+        selected=e.target;selected.classList.add('__fve_s');
+        window.parent.postMessage({type:'FORGE_VE_SELECT',info:getInfo(selected)},'*');
+      }
+      function activate(){
+        if(active)return; active=true;
+        style=document.createElement('style');
+        style.id='__fve_style';
+        style.textContent='.__fve_h{outline:2px solid #f59e0b!important;outline-offset:2px!important;cursor:crosshair!important}.__fve_s{outline:2px solid #f97316!important;outline-offset:2px!important}';
+        document.head.appendChild(style);
+        document.addEventListener('mouseover',onMouseOver,true);
+        document.addEventListener('mouseout',onMouseOut,true);
+        document.addEventListener('click',onClick,true);
+      }
+      function deactivate(){
+        if(!active)return; active=false;
+        document.removeEventListener('mouseover',onMouseOver,true);
+        document.removeEventListener('mouseout',onMouseOut,true);
+        document.removeEventListener('click',onClick,true);
+        if(style){style.remove();style=null;}
+        document.querySelectorAll('.__fve_h,.__fve_s').forEach(function(el){el.classList.remove('__fve_h','__fve_s');});
+        selected=null;hovered=null;
+      }
+      window.addEventListener('message',function(e){
+        if(e.data&&e.data.type==='FORGE_VE_ACTIVATE')activate();
+        if(e.data&&e.data.type==='FORGE_VE_DEACTIVATE')deactivate();
+        if(e.data&&e.data.type==='FORGE_VE_STYLE'&&selected)selected.style[e.data.prop]=e.data.value;
+        if(e.data&&e.data.type==='FORGE_VE_TEXT'&&selected){
+          if(selected.childNodes.length===1&&selected.childNodes[0].nodeType===3)selected.textContent=e.data.text;
+        }
+        if(e.data&&e.data.type==='FORGE_VE_REVERT'&&selected)selected.style.cssText='';
+        if(e.data&&e.data.type==='FORGE_VE_DESELECT'&&selected){selected.classList.remove('__fve_s','__fve_h');selected=null;}
+      });
+    })();
+    </script>
+  </body>
+</html>

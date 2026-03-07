@@ -1,0 +1,56 @@
+{
+  "blueprint": {
+    "appType": "SaaS Dashboard",
+    "appTitle": "ResolutionDesk",
+    "stack": [
+      "React",
+      "TypeScript",
+      "Tailwind CSS",
+      "lucide-react",
+      "localStorage"
+    ],
+    "pages": [
+      "Dashboard",
+      "Issues",
+      "NewIssue",
+      "IssueDetail"
+    ],
+    "components": [
+      "Sidebar",
+      "IssueCard",
+      "IssueTable",
+      "StatusBadge",
+      "SeverityBadge",
+      "KPICard"
+    ],
+    "dataModels": [
+      "Issue"
+    ],
+    "features": [
+      "Create issues",
+      "View issue list",
+      "Issue detail view",
+      "Status tracking",
+      "Severity levels",
+      "Search and filter"
+    ],
+    "authNeeded": false,
+    "files": [
+      "src/App.tsx",
+      "src/components/Sidebar.tsx",
+      "src/components/IssueTable.tsx",
+      "src/components/StatusBadge.tsx",
+      "src/components/SeverityBadge.tsx",
+      "src/components/KPICard.tsx",
+      "src/pages/Dashboard.tsx",
+      "src/pages/Issues.tsx",
+      "src/pages/NewIssue.tsx",
+      "src/pages/IssueDetail.tsx",
+      "src/lib/db.ts",
+      "src/lib/utils.ts",
+      "src/types/index.ts",
+      "src/index.css"
+    ]
+  },
+  "savedAt": 1772854779391
+}
