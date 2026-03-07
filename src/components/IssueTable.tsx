@@ -46,31 +46,48 @@ export const IssueTable: React.FC<IssueTableProps> = ({ issues }) => {
               <tr
                 key={issue.id}
                 onClick={() => navigate(`/issues/${issue.id}`)}
-                className="hover:bg-zinc-800/40 cursor-pointer transition-colors"
+                className="cursor-pointer hover:bg-zinc-800/40 transition-colors group"
               >
                 <td className="py-3.5 px-4">
-                  <span className="text-xs font-mono text-zinc-500">{issue.id}</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-mono text-zinc-500">{issue.id}</span>
+                    {issue.isMasterIncident && (
+                      <Star size={10} className="text-violet-400" fill="currentColor" />
+                    )}
+                  </div>
                 </td>
                 <td className="py-3.5 px-4">
                   <div className="flex items-center gap-2">
-                    {issue.isMasterIncident && (
-                      <Star size={12} className="text-violet-400 flex-shrink-0" fill="currentColor" />
+                    <span className="text-sm text-zinc-200 group-hover:text-white font-medium max-w-xs truncate">
+                      {issue.title}
+                    </span>
+                    {isResolved && issue.resolution && (
+                      <CheckCircle2 size={13} className="text-emerald-400 flex-shrink-0" />
                     )}
-                    <span className="text-sm text-zinc-200 font-medium truncate max-w-[300px]">{issue.title}</span>
+                    {issue.linkedIncidentCount && issue.linkedIncidentCount > 0 ? (
+                      <span className="inline-flex items-center gap-0.5 text-xs text-violet-400">
+                        <Link size={11} />{issue.linkedIncidentCount}
+                      </span>
+                    ) : null}
                   </div>
-                  {isResolved && issue.confidenceScore !== undefined && (
+                  {issue.resolution && (
                     <div className="mt-1">
-                      <ConfidenceBadge score={issue.confidenceScore} size="sm" />
+                      <ConfidenceBadge issue={issue} size="sm" />
                     </div>
                   )}
                 </td>
                 <td className="py-3.5 px-4">
-                  <div className="flex flex-wrap gap-1">
-                    {issue.tags?.map(tag => <TagBadge key={tag} tag={tag} size="sm" />)}
+                  <div className="flex items-center gap-1 flex-wrap">
+                    {issue.tags && issue.tags.slice(0, 2).map(tag => (
+                      <TagBadge key={tag} tag={tag} size="sm" />
+                    ))}
+                    {issue.tags && issue.tags.length > 2 && (
+                      <span className="text-xs text-zinc-600">+{issue.tags.length - 2}</span>
+                    )}
                   </div>
                 </td>
                 <td className="py-3.5 px-4">
-                  <span className="text-xs text-zinc-400 truncate max-w-[120px] block">{issue.systemAffected}</span>
+                  <span className="text-xs text-zinc-400">{issue.systemAffected}</span>
                 </td>
                 <td className="py-3.5 px-4">
                   <SeverityBadge severity={issue.severity} size="sm" />

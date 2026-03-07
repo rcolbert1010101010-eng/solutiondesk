@@ -41,43 +41,44 @@ export const IssueCard: React.FC<IssueCardProps> = ({ issue }) => {
         </div>
         <SeverityBadge severity={issue.severity} size="sm" />
       </div>
-      <p className="text-xs text-zinc-500 line-clamp-2 mb-3">{issue.description}</p>
-      {issue.tags && issue.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1 mb-3" onClick={e => e.stopPropagation()}>
-          {issue.tags.map(tag => (
-            <TagBadge key={tag} tag={tag} size="sm" />
-          ))}
-        </div>
-      )}
-      {(issue.linkedIncidentCount ?? 0) > 0 && (
-        <div className="flex items-center gap-1 text-xs text-zinc-600 mb-2">
-          <Link size={11} />
-          <span>{issue.linkedIncidentCount} linked incidents</span>
-        </div>
-      )}
-      {issue.isMasterIncident && issue.confidenceScore !== undefined && (
-        <div className="mb-2">
-          <ConfidenceBadge score={issue.confidenceScore} size="sm" />
-        </div>
-      )}
-      <div className="flex items-center justify-between text-xs text-zinc-600 mt-2 pt-2 border-t border-zinc-800">
-        <div className="flex items-center gap-1">
-          <Monitor size={11} />
-          <span className="truncate max-w-[120px]">{issue.systemAffected}</span>
-        </div>
-        <div className="flex items-center gap-3">
+      <p className="text-xs text-zinc-500 mb-3 line-clamp-2">{issue.description}</p>
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        {issue.tags && issue.tags.map(tag => (
+          <TagBadge key={tag} tag={tag} size="sm" />
+        ))}
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-3 text-xs text-zinc-500">
+          <span className="flex items-center gap-1">
+            <Monitor size={11} />
+            {issue.systemAffected}
+          </span>
           {issue.assignee && (
             <span className="flex items-center gap-1">
               <User size={11} />
               {issue.assignee}
             </span>
           )}
-          <span className="flex items-center gap-1">
-            <Clock size={11} />
+          {issue.linkedIncidentCount && issue.linkedIncidentCount > 0 ? (
+            <span className="flex items-center gap-1 text-violet-400">
+              <Link size={11} />
+              {issue.linkedIncidentCount}
+            </span>
+          ) : null}
+        </div>
+        <div className="flex items-center gap-2">
+          <StatusBadge status={issue.status} size="sm" />
+          <span className="flex items-center gap-1 text-xs text-zinc-600">
+            <Clock size={10} />
             {formatRelativeTime(issue.createdAt)}
           </span>
         </div>
       </div>
+      {issue.resolution && (
+        <div className="mt-3 pt-3 border-t border-zinc-800">
+          <ConfidenceBadge issue={issue} size="sm" showScore />
+        </div>
+      )}
     </div>
   );
 };

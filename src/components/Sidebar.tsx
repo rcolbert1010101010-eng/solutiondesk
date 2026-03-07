@@ -7,8 +7,7 @@ import {
   Zap,
   Menu,
   X,
-  BookOpen,
-  ChevronRight
+  BookOpen
 } from 'lucide-react';
 
 const navItems = [
@@ -50,8 +49,8 @@ export const Sidebar: React.FC = () => {
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 group ${
                 isActive
-                  ? 'bg-amber-400/15 text-amber-300 border border-amber-400/20'
-                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
+                  ? 'bg-amber-400/10 text-amber-400'
+                  : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800'
               }`
             }
           >
@@ -59,16 +58,22 @@ export const Sidebar: React.FC = () => {
               <>
                 <item.icon size={18} className={isActive ? 'text-amber-400' : 'text-zinc-500 group-hover:text-zinc-300'} />
                 <span>{item.label}</span>
-                {isActive && <ChevronRight size={14} className="ml-auto text-amber-400/60" />}
               </>
             )}
           </NavLink>
         ))}
       </nav>
 
-      <div className="px-5 py-4 border-t border-zinc-800">
-        <p className="text-xs text-zinc-600">ResolutionDesk v2.0</p>
-        <p className="text-xs text-zinc-700">Support Intelligence Platform</p>
+      <div className="px-3 py-4 border-t border-zinc-800">
+        <div className="flex items-center gap-3 px-3 py-2">
+          <div className="w-7 h-7 rounded-full bg-amber-400/20 flex items-center justify-center">
+            <span className="text-xs font-bold text-amber-400">IT</span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-xs font-medium text-zinc-300">IT Support</span>
+            <span className="text-xs text-zinc-600">Admin</span>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -77,31 +82,31 @@ export const Sidebar: React.FC = () => {
     <>
       {/* Mobile toggle */}
       <button
-        className="fixed top-4 left-4 z-50 p-2 bg-zinc-900 border border-zinc-800 rounded-lg md:hidden"
+        className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-400"
         onClick={() => setMobileOpen(!mobileOpen)}
       >
-        {mobileOpen ? <X size={18} className="text-zinc-300" /> : <Menu size={18} className="text-zinc-300" />}
+        {mobileOpen ? <X size={20} /> : <Menu size={20} />}
       </button>
 
       {/* Mobile overlay */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 bg-black/60 z-40 md:hidden"
+          className="lg:hidden fixed inset-0 z-40 bg-black/60"
           onClick={() => setMobileOpen(false)}
         />
       )}
 
-      {/* Mobile sidebar */}
-      <div className={`fixed top-0 left-0 h-full w-64 bg-zinc-950 border-r border-zinc-800 z-50 transform transition-transform duration-200 md:hidden ${
+      {/* Mobile drawer */}
+      <div className={`lg:hidden fixed top-0 left-0 z-40 h-full w-64 bg-zinc-950 border-r border-zinc-800 transform transition-transform duration-200 ${
         mobileOpen ? 'translate-x-0' : '-translate-x-full'
       }`}>
         <SidebarContent />
       </div>
 
       {/* Desktop sidebar */}
-      <div className="hidden md:flex w-60 bg-zinc-950 border-r border-zinc-800 flex-col h-screen sticky top-0">
+      <aside className="hidden lg:flex flex-col w-64 bg-zinc-950 border-r border-zinc-800 h-screen sticky top-0">
         <SidebarContent />
-      </div>
+      </aside>
     </>
   );
 };

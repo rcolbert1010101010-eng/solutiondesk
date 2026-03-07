@@ -1,12 +1,25 @@
-export type Severity = 'Low' | 'Medium' | 'High' | 'Critical';
 export type Status = 'Open' | 'Investigating' | 'Resolved' | 'Closed';
+export type Severity = 'Low' | 'Medium' | 'High' | 'Critical';
+export type Tag = 'network' | 'database' | 'authentication' | 'api' | 'permissions' | 'timeout' | 'deployment';
+export type RelationshipType = 'duplicate' | 'similar' | 'derived_from' | 'confirmed_same_root_cause';
+
+export const ALL_TAGS: Tag[] = ['network', 'database', 'authentication', 'api', 'permissions', 'timeout', 'deployment'];
 
 export interface Resolution {
-  rootCause: string;
-  stepsTaken: string;
-  finalResolution: string;
-  preventionNotes: string;
+  id: string;
+  steps: string;
+  resolvedBy: string;
   resolvedAt: string;
+  timeToResolve?: number;
+  verified?: boolean;
+}
+
+export interface IssueRelationship {
+  id: string;
+  masterId: string;
+  sourceId: string;
+  type: RelationshipType;
+  createdAt: string;
 }
 
 export interface Issue {
@@ -17,7 +30,12 @@ export interface Issue {
   severity: Severity;
   status: Status;
   createdAt: string;
-  resolution?: string;
-  resolutionData?: Resolution;
+  updatedAt?: string;
   assignee?: string;
+  tags: Tag[];
+  resolution?: Resolution;
+  isMasterIncident?: boolean;
+  linkedIncidentCount?: number;
+  referenceCount?: number;
+  masterIncidentId?: string;
 }

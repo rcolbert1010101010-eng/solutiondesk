@@ -1,7 +1,7 @@
 import React from 'react';
 import { getConfidenceLevel } from '../lib/db';
 import { Issue } from '../types';
-import { Shield, TrendingUp, Award, Star } from 'lucide-react';
+import { Shield, TrendingUp, Award } from 'lucide-react';
 
 interface ConfidenceBadgeProps {
   issue: Issue;

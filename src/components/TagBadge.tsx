@@ -1,5 +1,6 @@
 import React from 'react';
 import { Tag } from '../types';
+import { X } from 'lucide-react';
 
 interface TagBadgeProps {
   tag: Tag;
@@ -57,24 +58,24 @@ export const TagBadge: React.FC<TagBadgeProps> = ({
   onRemove
 }) => {
   const config = tagConfig[tag];
+  if (!config) return null;
   const sizeClasses = size === 'sm' ? 'text-xs px-2 py-0.5' : 'text-xs px-2.5 py-1';
   const colorClasses = selected ? config.selectedClasses : config.classes;
-  const cursorClass = onClick ? 'cursor-pointer' : 'cursor-default';
 
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full font-medium transition-colors ${colorClasses} ${sizeClasses} ${cursorClass}`}
+      className={`inline-flex items-center gap-1 rounded-full font-medium transition-colors ${
+        onClick ? 'cursor-pointer' : ''
+      } ${colorClasses} ${sizeClasses}`}
       onClick={onClick ? () => onClick(tag) : undefined}
     >
-      <span className="font-mono text-[10px] opacity-60">#</span>
       {config.label}
       {removable && onRemove && (
         <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); onRemove(tag); }}
-          className="ml-0.5 opacity-60 hover:opacity-100 transition-opacity leading-none"
+          onClick={e => { e.stopPropagation(); onRemove(tag); }}
+          className="ml-0.5 hover:opacity-70"
         >
-          ×
+          <X size={10} />
         </button>
       )}
     </span>

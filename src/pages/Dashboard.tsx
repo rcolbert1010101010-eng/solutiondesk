@@ -53,61 +53,126 @@ export const Dashboard: React.FC = () => {
         <div className="flex items-start justify-between mb-8">
           <div>
             <h1 className="text-2xl font-bold text-zinc-100">Dashboard</h1>
-            <p className="text-sm text-zinc-500 mt-1">
-              {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
-            </p>
+            <p className="text-sm text-zinc-500 mt-1">Support intelligence overview</p>
           </div>
           <button
             onClick={() => navigate('/new-issue')}
-            className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-zinc-900 font-semibold text-sm px-4 py-2.5 rounded-lg transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-amber-400 hover:bg-amber-300 text-zinc-900 rounded-lg text-sm font-semibold transition-colors"
           >
             <PlusCircle size={16} />
             New Issue
           </button>
         </div>
 
-        {/* KPIs */}
+        {/* KPI Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <KPICard
             title="Open Issues"
             value={open}
-            subtitle={`${investigating} investigating`}
-            icon={AlertTriangle}
-            iconColor="text-amber-400"
-            iconBg="bg-amber-400/10"
+            icon={Activity}
+            iconColor="text-blue-400"
+            iconBg="bg-blue-400/10"
+            subtitle="Active"
           />
           <KPICard
-            title="Critical"
-            value={critical}
-            subtitle="need immediate action"
-            icon={Activity}
-            iconColor="text-red-400"
-            iconBg="bg-red-400/10"
+            title="Investigating"
+            value={investigating}
+            icon={Clock}
+            iconColor="text-amber-400"
+            iconBg="bg-amber-400/10"
+            subtitle="In progress"
           />
           <KPICard
             title="Resolved"
             value={resolved}
-            subtitle="total resolutions"
             icon={CheckCircle2}
             iconColor="text-emerald-400"
             iconBg="bg-emerald-400/10"
+            subtitle="Completed"
           />
           <KPICard
-            title="Master Incidents"
-            value={masterIncidents.length}
-            subtitle={`${totalLinked} issues linked`}
-            icon={Star}
-            iconColor="text-violet-400"
-            iconBg="bg-violet-400/10"
+            title="Critical"
+            value={critical}
+            icon={AlertTriangle}
+            iconColor="text-red-400"
+            iconBg="bg-red-400/10"
+            subtitle="High priority"
           />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          {/* Recent Issues */}
+          {/* Master Incidents */}
           <div className="lg:col-span-2 bg-zinc-900 border border-zinc-800 rounded-xl p-5">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-semibold text-zinc-100">Recent Issues</h2>
-              <button onClick={() => navigate('/issues')} className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1">
+              <div className="flex items-center gap-2">
+                <Star size={16} className="text-violet-400" fill="currentColor" />
+                <h2 className="text-sm font-semibold text-zinc-200">Master Incidents</h2>
+                <span className="text-xs bg-violet-500/15 text-violet-400 border border-violet-500/25 px-1.5 py-0.5 rounded-full">{masterIncidents.length}</span>
+              </div>
+              <button onClick={() => navigate('/issues')} className="text-xs text-zinc-500 hover:text-zinc-300 flex items-center gap-1 transition-colors">
+                View all <ArrowRight size={12} />
+              </button>
+            </div>
+            {topMasterIncidents.length === 0 ? (
+              <p className="text-sm text-zinc-600 text-center py-8">No master incidents yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {topMasterIncidents.map(issue => (
+                  <div
+                    key={issue.id}
+                    onClick={() => navigate(`/issues/${issue.id}`)}
+                    className="flex items-center gap-3 p-3 rounded-lg hover:bg-zinc-800 cursor-pointer transition-colors group"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="text-xs font-mono text-zinc-600">{issue.id}</span>
+                        <StatusBadge status={issue.status} size="sm" />
+                      </div>
+                      <p className="text-sm text-zinc-300 group-hover:text-white truncate font-medium">{issue.title}</p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {issue.linkedIncidentCount && issue.linkedIncidentCount > 0 ? (
+                        <span className="flex items-center gap-1 text-xs text-violet-400">
+                          <Link size={11} />{issue.linkedIncidentCount}
+                        </span>
+                      ) : null}
+                      <SeverityBadge severity={issue.severity} size="sm" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Stats */}
+          <div className="flex flex-col gap-4">
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <Link size={14} className="text-violet-400" />
+                <h3 className="text-sm font-semibold text-zinc-200">Linked Incidents</h3>
+              </div>
+              <p className="text-3xl font-bold text-zinc-100">{totalLinked}</p>
+              <p className="text-xs text-zinc-500 mt-1">Across {masterIncidents.length} master incidents</p>
+            </div>
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <Award size={14} className="text-amber-400" />
+                <h3 className="text-sm font-semibold text-zinc-200">Resolution Rate</h3>
+              </div>
+              <p className="text-3xl font-bold text-zinc-100">
+                {issues.length > 0 ? Math.round((resolved / issues.length) * 100) : 0}%
+              </p>
+              <p className="text-xs text-zinc-500 mt-1">{resolved} of {issues.length} issues resolved</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Recent Issues */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm font-semibold text-zinc-200">Recent Issues</h2>
+              <button onClick={() => navigate('/issues')} className="text-xs text-zinc-500 hover:text-zinc-300 flex items-center gap-1 transition-colors">
                 View all <ArrowRight size={12} />
               </button>
             </div>
@@ -116,121 +181,52 @@ export const Dashboard: React.FC = () => {
                 <div
                   key={issue.id}
                   onClick={() => navigate(`/issues/${issue.id}`)}
-                  className="flex items-center gap-3 p-3 rounded-lg hover:bg-zinc-800 cursor-pointer transition-colors"
+                  className="flex items-center gap-3 p-3 rounded-lg hover:bg-zinc-800 cursor-pointer transition-colors group"
                 >
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className="text-xs font-mono text-zinc-500">{issue.id}</span>
-                      {issue.isMasterIncident && (
-                        <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full bg-violet-500/15 text-violet-400 border border-violet-500/25">
-                          <Star size={9} fill="currentColor" /> Master
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-sm text-zinc-200 truncate">{issue.title}</p>
+                    <p className="text-sm text-zinc-300 group-hover:text-white truncate font-medium">{issue.title}</p>
+                    <p className="text-xs text-zinc-600 mt-0.5">{formatRelativeTime(issue.createdAt)}</p>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    <StatusBadge status={issue.status} size="sm" />
                     <SeverityBadge severity={issue.severity} size="sm" />
+                    <StatusBadge status={issue.status} size="sm" />
                   </div>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Quick Stats */}
-          <div className="space-y-4">
-            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-              <div className="flex items-center gap-2 mb-3">
-                <BarChart3 size={16} className="text-amber-400" />
-                <h2 className="text-sm font-semibold text-zinc-100">System Health</h2>
-              </div>
-              <div className="space-y-2">
-                {[
-                  { label: 'Open', count: open, color: 'bg-blue-400' },
-                  { label: 'Investigating', count: investigating, color: 'bg-amber-400' },
-                  { label: 'Resolved', count: resolved, color: 'bg-emerald-400' },
-                  { label: 'Critical', count: critical, color: 'bg-red-400' }
-                ].map(item => (
-                  <div key={item.label} className="flex items-center gap-3">
-                    <span className="text-xs text-zinc-400 w-24">{item.label}</span>
-                    <div className="flex-1 bg-zinc-800 rounded-full h-1.5">
-                      <div
-                        className={`${item.color} h-1.5 rounded-full transition-all`}
-                        style={{ width: `${Math.min((item.count / Math.max(issues.length, 1)) * 100, 100)}%` }}
-                      />
-                    </div>
-                    <span className="text-xs font-mono text-zinc-400 w-4 text-right">{item.count}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Analytics Widgets */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Top Master Incidents */}
+          {/* Most Reused Resolutions */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
-                <Star size={16} className="text-violet-400" />
-                <h2 className="text-sm font-semibold text-zinc-100">Top Master Incidents</h2>
+                <BarChart3 size={14} className="text-amber-400" />
+                <h2 className="text-sm font-semibold text-zinc-200">Most Referenced</h2>
               </div>
-              <button onClick={() => navigate('/resolution-library')} className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1">
+              <button onClick={() => navigate('/resolution-library')} className="text-xs text-zinc-500 hover:text-zinc-300 flex items-center gap-1 transition-colors">
                 Library <ArrowRight size={12} />
               </button>
             </div>
-            {topMasterIncidents.length === 0 ? (
-              <p className="text-xs text-zinc-500 py-4 text-center">No master incidents yet.</p>
-            ) : (
-              <div className="space-y-2">
-                {topMasterIncidents.map(issue => (
-                  <div
-                    key={issue.id}
-                    onClick={() => navigate(`/issues/${issue.id}`)}
-                    className="flex items-center gap-3 p-3 rounded-lg hover:bg-zinc-800 cursor-pointer transition-colors"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-zinc-200 truncate">{issue.title}</p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-xs text-zinc-500">
-                          <Link size={10} className="inline mr-1" />
-                          {issue.linkedIncidentCount ?? 0} linked
-                        </span>
-                        <ConfidenceBadge score={issue.confidenceScore ?? 0} size="sm" />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Most Reused Resolutions */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <Award size={16} className="text-amber-400" />
-              <h2 className="text-sm font-semibold text-zinc-100">Most Reused Resolutions</h2>
-            </div>
             {mostReused.length === 0 ? (
-              <p className="text-xs text-zinc-500 py-4 text-center">No reused resolutions yet.</p>
+              <p className="text-sm text-zinc-600 text-center py-8">No referenced issues yet.</p>
             ) : (
               <div className="space-y-2">
                 {mostReused.map(issue => (
                   <div
                     key={issue.id}
                     onClick={() => navigate(`/issues/${issue.id}`)}
-                    className="flex items-center gap-3 p-3 rounded-lg hover:bg-zinc-800 cursor-pointer transition-colors"
+                    className="flex items-center gap-3 p-3 rounded-lg hover:bg-zinc-800 cursor-pointer transition-colors group"
                   >
-                    <div className="w-7 h-7 rounded-full bg-amber-400/10 flex items-center justify-center flex-shrink-0">
-                      <span className="text-xs font-bold text-amber-400">{issue.referenceCount ?? 0}</span>
-                    </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-zinc-200 truncate">{issue.title}</p>
-                      <p className="text-xs text-zinc-500">{issue.systemAffected}</p>
+                      <p className="text-sm text-zinc-300 group-hover:text-white truncate font-medium">{issue.title}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        {issue.resolution && <ConfidenceBadge issue={issue} size="sm" />}
+                      </div>
                     </div>
-                    <ConfidenceBadge score={issue.confidenceScore ?? 0} size="sm" />
+                    <div className="text-right flex-shrink-0">
+                      <span className="text-sm font-bold text-amber-400">{issue.referenceCount}</span>
+                      <p className="text-xs text-zinc-600">refs</p>
+                    </div>
                   </div>
                 ))}
               </div>
