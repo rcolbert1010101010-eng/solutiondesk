@@ -13,6 +13,16 @@ body {
   color: #e4e4e7;
 }
 
+html.light-theme body {
+  background-color: #f1f5f9;
+  color: #0f172a;
+}
+
+html.dark-theme body {
+  background-color: #0f0f10;
+  color: #e4e4e7;
+}
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -29,25 +39,4 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #52525b;
-}
-
-.light {
-  background: white;
-  color: #111827;
-}
-
-.light .bg-gray-900 {
-  background: white !important;
-}
-
-.light .bg-gray-800 {
-  background: #f9fafb !important;
-}
-
-.light .text-white {
-  color: #111827 !important;
-}
-
-.light .border-gray-700 {
-  border-color: #e5e7eb !important;
 }

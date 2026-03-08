@@ -19,6 +19,7 @@ import {
   X,
   Filter
 } from 'lucide-react';
+import { useTheme } from '../context/ThemeContext';
 
 export const ResolutionLibrary: React.FC = () => {
   const [issues, setIssues] = useState<Issue[]>([]);
@@ -27,6 +28,8 @@ export const ResolutionLibrary: React.FC = () => {
   const [filterMaster, setFilterMaster] = useState(false);
   const [semanticMode, setSemanticMode] = useState(false);
   const navigate = useNavigate();
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
 
   useEffect(() => {
     setIssues(getAllIssues());
@@ -60,35 +63,37 @@ export const ResolutionLibrary: React.FC = () => {
               <div className="w-8 h-8 bg-violet-500/10 rounded-lg flex items-center justify-center">
                 <BookOpen size={16} className="text-violet-400" />
               </div>
-              <h1 className="text-2xl font-bold text-zinc-100">Resolution Library</h1>
+              <h1 className={`text-2xl font-bold ${isDark ? 'text-zinc-100' : 'text-slate-900'}`}>Resolution Library</h1>
             </div>
-            <p className="text-sm text-zinc-500 mt-1">Search past resolutions using keywords or semantic similarity</p>
+            <p className={`text-sm mt-1 ${isDark ? 'text-zinc-500' : 'text-slate-500'}`}>Search past resolutions using keywords or semantic similarity</p>
           </div>
         </div>
 
         {/* Stats */}
         <div className="grid grid-cols-3 gap-4 mb-6">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-            <div className="text-2xl font-bold text-zinc-100">{withResolution.length}</div>
-            <div className="text-xs text-zinc-500 mt-1">Documented Resolutions</div>
+          <div className={`border rounded-xl p-4 ${isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'}`}>
+            <div className={`text-2xl font-bold ${isDark ? 'text-zinc-100' : 'text-slate-900'}`}>{withResolution.length}</div>
+            <div className={`text-xs mt-1 ${isDark ? 'text-zinc-500' : 'text-slate-500'}`}>Documented Resolutions</div>
           </div>
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+          <div className={`border rounded-xl p-4 ${isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'}`}>
             <div className="text-2xl font-bold text-violet-400">{masterCount}</div>
-            <div className="text-xs text-zinc-500 mt-1">Master Incidents</div>
+            <div className={`text-xs mt-1 ${isDark ? 'text-zinc-500' : 'text-slate-500'}`}>Master Incidents</div>
           </div>
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+          <div className={`border rounded-xl p-4 ${isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'}`}>
             <div className="text-2xl font-bold text-emerald-400">{resolvedIssues.length}</div>
-            <div className="text-xs text-zinc-500 mt-1">Resolved Issues</div>
+            <div className={`text-xs mt-1 ${isDark ? 'text-zinc-500' : 'text-slate-500'}`}>Resolved Issues</div>
           </div>
         </div>
 
         {/* Search Mode Toggle */}
         <div className="flex gap-3 items-center mb-4">
-          <div className="flex rounded-lg border border-zinc-700 overflow-hidden">
+          <div className={`flex rounded-lg border overflow-hidden ${isDark ? 'border-zinc-700' : 'border-slate-200'}`}>
             <button
               onClick={() => setSemanticMode(false)}
               className={`px-3 py-2 text-xs font-medium flex items-center gap-1.5 transition-colors ${
-                !semanticMode ? 'bg-zinc-700 text-zinc-100' : 'bg-zinc-900 text-zinc-500 hover:text-zinc-300'
+                !semanticMode
+                  ? (isDark ? 'bg-zinc-700 text-zinc-100' : 'bg-slate-100 text-slate-900')
+                  : (isDark ? 'bg-zinc-900 text-zinc-500 hover:text-zinc-300' : 'bg-white text-slate-500 hover:text-slate-700')
               }`}
             >
               <Search size={11} /> Keyword
@@ -96,7 +101,7 @@ export const ResolutionLibrary: React.FC = () => {
             <button
               onClick={() => setSemanticMode(true)}
               className={`px-3 py-2 text-xs font-medium flex items-center gap-1.5 transition-colors ${
-                semanticMode ? 'bg-amber-500/20 text-amber-400' : 'bg-zinc-900 text-zinc-500 hover:text-zinc-300'
+                semanticMode ? 'bg-amber-500/20 text-amber-400' : (isDark ? 'bg-zinc-900 text-zinc-500 hover:text-zinc-300' : 'bg-white text-slate-500 hover:text-slate-700')
               }`}
             >
               <Zap size={11} /> Semantic
@@ -105,18 +110,22 @@ export const ResolutionLibrary: React.FC = () => {
 
           {!semanticMode && (
             <div className="relative flex-1">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+              <Search size={14} className={`absolute left-3 top-1/2 -translate-y-1/2 ${isDark ? 'text-zinc-500' : 'text-slate-400'}`} />
               <input
                 type="text"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Search by title, system, resolution, root cause..."
-                className="w-full bg-zinc-900 border border-zinc-700 rounded-lg pl-9 pr-9 py-2 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20"
+                className={`w-full border rounded-lg pl-9 pr-9 py-2 text-sm focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 ${
+                  isDark
+                    ? 'bg-zinc-900 border-zinc-700 text-zinc-100 placeholder-zinc-500'
+                    : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400'
+                }`}
               />
               {search && (
                 <button
                   onClick={() => setSearch('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                  className={`absolute right-3 top-1/2 -translate-y-1/2 ${isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-slate-400 hover:text-slate-700'}`}
                 >
                   <X size={12} />
                 </button>
@@ -130,7 +139,7 @@ export const ResolutionLibrary: React.FC = () => {
               className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium transition-colors ${
                 filterResolved
                   ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400'
-                  : 'border-zinc-700 bg-zinc-900 text-zinc-400 hover:text-zinc-100'
+                  : (isDark ? 'border-zinc-700 bg-zinc-900 text-zinc-400 hover:text-zinc-100' : 'border-slate-200 bg-white text-slate-500 hover:text-slate-900')
               }`}
             >
               <CheckCircle2 size={11} /> Resolved only
@@ -140,7 +149,7 @@ export const ResolutionLibrary: React.FC = () => {
               className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium transition-colors ${
                 filterMaster
                   ? 'border-violet-500/40 bg-violet-500/10 text-violet-400'
-                  : 'border-zinc-700 bg-zinc-900 text-zinc-400 hover:text-zinc-100'
+                  : (isDark ? 'border-zinc-700 bg-zinc-900 text-zinc-400 hover:text-zinc-100' : 'border-slate-200 bg-white text-slate-500 hover:text-slate-900')
               }`}
             >
               <Star size={11} /> Master only
@@ -163,7 +172,7 @@ export const ResolutionLibrary: React.FC = () => {
         {!semanticMode && (
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-zinc-500">
+              <span className={`text-sm ${isDark ? 'text-zinc-500' : 'text-slate-500'}`}>
                 {displayIssues.length} issue{displayIssues.length !== 1 ? 's' : ''}
                 {search && ` matching "${search}"`}
               </span>
@@ -171,21 +180,25 @@ export const ResolutionLibrary: React.FC = () => {
 
             {displayIssues.length === 0 ? (
               <div className="text-center py-16">
-                <BookOpen size={32} className="mx-auto mb-4 text-zinc-700" />
-                <p className="text-zinc-500 text-sm">No issues match your current filters.</p>
-                <p className="text-xs text-zinc-600 mt-1">Try semantic search to find similar incidents by meaning.</p>
+                <BookOpen size={32} className={`mx-auto mb-4 ${isDark ? 'text-zinc-700' : 'text-slate-300'}`} />
+                <p className={`text-sm ${isDark ? 'text-zinc-500' : 'text-slate-500'}`}>No issues match your current filters.</p>
+                <p className={`text-xs mt-1 ${isDark ? 'text-zinc-600' : 'text-slate-400'}`}>Try semantic search to find similar incidents by meaning.</p>
               </div>
             ) : (
               displayIssues.map(issue => (
                 <div
                   key={issue.id}
                   onClick={() => navigate(`/issues/${issue.id}`)}
-                  className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 cursor-pointer hover:border-zinc-600 hover:bg-zinc-800/50 transition-all"
+                  className={`border rounded-xl p-4 cursor-pointer transition-all ${
+                    isDark
+                      ? 'bg-zinc-900 border-zinc-800 hover:border-zinc-600 hover:bg-zinc-800/50'
+                      : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                  }`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <span className="text-xs font-mono text-zinc-500">{issue.id}</span>
+                        <span className={`text-xs font-mono ${isDark ? 'text-zinc-500' : 'text-slate-500'}`}>{issue.id}</span>
                         {issue.isMasterIncident && (
                           <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full bg-violet-500/15 text-violet-400 border border-violet-500/25">
                             <Star size={9} fill="currentColor" /> Master
@@ -194,31 +207,31 @@ export const ResolutionLibrary: React.FC = () => {
                         <StatusBadge status={issue.status} size="sm" />
                         <ConfidenceBadge issue={issue} size="sm" showScore />
                       </div>
-                      <h3 className="text-sm font-semibold text-zinc-100">{issue.title}</h3>
-                      <p className="text-xs text-zinc-500 mt-1 line-clamp-2">{issue.description}</p>
+                      <h3 className={`text-sm font-semibold ${isDark ? 'text-zinc-100' : 'text-slate-900'}`}>{issue.title}</h3>
+                      <p className={`text-xs mt-1 line-clamp-2 ${isDark ? 'text-zinc-500' : 'text-slate-500'}`}>{issue.description}</p>
                     </div>
                     <SeverityBadge severity={issue.severity} size="sm" />
                   </div>
 
                   {issue.resolution && (
-                    <div className="mt-3 pt-3 border-t border-zinc-800">
+                    <div className={`mt-3 pt-3 border-t ${isDark ? 'border-zinc-800' : 'border-slate-200'}`}>
                       <div className="flex items-center gap-2 mb-1">
                         <CheckCircle2 size={11} className="text-emerald-400" />
                         <span className="text-xs font-medium text-emerald-400">Documented Resolution</span>
                       </div>
-                      <p className="text-xs text-zinc-400 line-clamp-2">{issue.resolution.summary}</p>
+                      <p className={`text-xs line-clamp-2 ${isDark ? 'text-zinc-400' : 'text-slate-700'}`}>{issue.resolution.summary}</p>
                       {issue.resolution.rootCause && (
-                        <p className="text-xs text-zinc-500 mt-1">
-                          <span className="text-zinc-600">Root cause:</span> {issue.resolution.rootCause}
+                        <p className={`text-xs mt-1 ${isDark ? 'text-zinc-500' : 'text-slate-500'}`}>
+                          <span className={isDark ? 'text-zinc-600' : 'text-slate-400'}>Root cause:</span> {issue.resolution.rootCause}
                         </p>
                       )}
                     </div>
                   )}
 
                   <div className="flex items-center gap-3 mt-3 flex-wrap">
-                    <span className="text-xs text-zinc-500">{issue.systemAffected}</span>
-                    <span className="text-xs text-zinc-600">•</span>
-                    <span className="text-xs text-zinc-500">{formatRelativeTime(issue.createdAt)}</span>
+                    <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-slate-500'}`}>{issue.systemAffected}</span>
+                    <span className={`text-xs ${isDark ? 'text-zinc-600' : 'text-slate-400'}`}>•</span>
+                    <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-slate-500'}`}>{formatRelativeTime(issue.createdAt)}</span>
                     {issue.tags && issue.tags.length > 0 && (
                       <div className="flex gap-1 flex-wrap">
                         {issue.tags.map(tag => (
