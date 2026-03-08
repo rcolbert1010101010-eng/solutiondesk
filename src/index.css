@@ -9,16 +9,11 @@
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', sans-serif;
-  background-color: #0f0f10;
-  color: #e4e4e7;
-}
-
-html.light-theme body {
   background-color: #f1f5f9;
   color: #0f172a;
 }
 
-html.dark-theme body {
+html.dark body {
   background-color: #0f0f10;
   color: #e4e4e7;
 }

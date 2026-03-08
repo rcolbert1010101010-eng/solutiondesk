@@ -20,13 +20,10 @@ import {
   Award,
   BarChart3
 } from 'lucide-react';
-import { useTheme } from '../context/ThemeContext';
 
 export const Dashboard: React.FC = () => {
   const [issues, setIssues] = useState<Issue[]>([]);
   const navigate = useNavigate();
-  const { theme } = useTheme();
-  const isDark = theme === 'dark';
 
   useEffect(() => {
     setIssues(getAllIssues());
@@ -55,8 +52,8 @@ export const Dashboard: React.FC = () => {
         {/* Header */}
         <div className="flex items-start justify-between mb-8">
           <div>
-            <h1 className={`text-2xl font-bold ${isDark ? 'text-zinc-100' : 'text-slate-900'}`}>Dashboard</h1>
-            <p className={`text-sm mt-1 ${isDark ? 'text-zinc-500' : 'text-slate-500'}`}>Support intelligence overview</p>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-zinc-100">Dashboard</h1>
+            <p className="text-sm mt-1 text-slate-500 dark:text-zinc-500">Support intelligence overview</p>
           </div>
           <button
             onClick={() => navigate('/new-issue')}
@@ -105,33 +102,33 @@ export const Dashboard: React.FC = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
           {/* Master Incidents */}
-          <div className={`lg:col-span-2 border rounded-xl p-5 ${isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'}`}>
+          <div className="lg:col-span-2 border rounded-xl p-5 bg-white border-slate-200 dark:bg-zinc-900 dark:border-zinc-800">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <Star size={16} className="text-violet-400" fill="currentColor" />
-                <h2 className={`text-sm font-semibold ${isDark ? 'text-zinc-200' : 'text-slate-900'}`}>Master Incidents</h2>
+                <h2 className="text-sm font-semibold text-slate-900 dark:text-zinc-200">Master Incidents</h2>
                 <span className="text-xs bg-violet-500/15 text-violet-400 border border-violet-500/25 px-1.5 py-0.5 rounded-full">{masterIncidents.length}</span>
               </div>
-              <button onClick={() => navigate('/issues')} className={`text-xs flex items-center gap-1 transition-colors ${isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-slate-500 hover:text-slate-700'}`}>
+              <button onClick={() => navigate('/issues')} className="text-xs flex items-center gap-1 transition-colors text-slate-500 hover:text-slate-700 dark:text-zinc-500 dark:hover:text-zinc-300">
                 View all <ArrowRight size={12} />
               </button>
             </div>
             {topMasterIncidents.length === 0 ? (
-              <p className={`text-sm text-center py-8 ${isDark ? 'text-zinc-600' : 'text-slate-500'}`}>No master incidents yet.</p>
+              <p className="text-sm text-center py-8 text-slate-500 dark:text-zinc-600">No master incidents yet.</p>
             ) : (
               <div className="space-y-2">
                 {topMasterIncidents.map(issue => (
                   <div
                     key={issue.id}
                     onClick={() => navigate(`/issues/${issue.id}`)}
-                    className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors group ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-slate-50'}`}
+                    className="flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors group hover:bg-slate-50 dark:hover:bg-zinc-800"
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-0.5">
-                        <span className={`text-xs font-mono ${isDark ? 'text-zinc-600' : 'text-slate-500'}`}>{issue.id}</span>
+                        <span className="text-xs font-mono text-slate-500 dark:text-zinc-600">{issue.id}</span>
                         <StatusBadge status={issue.status} size="sm" />
                       </div>
-                      <p className={`text-sm truncate font-medium ${isDark ? 'text-zinc-300 group-hover:text-white' : 'text-slate-700 group-hover:text-slate-900'}`}>{issue.title}</p>
+                      <p className="text-sm truncate font-medium text-slate-700 group-hover:text-slate-900 dark:text-zinc-300 dark:group-hover:text-white">{issue.title}</p>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
                       {issue.linkedIncidentCount && issue.linkedIncidentCount > 0 ? (
@@ -149,33 +146,33 @@ export const Dashboard: React.FC = () => {
 
           {/* Stats */}
           <div className="flex flex-col gap-4">
-            <div className={`border rounded-xl p-5 ${isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'}`}>
+            <div className="border rounded-xl p-5 bg-white border-slate-200 dark:bg-zinc-900 dark:border-zinc-800">
               <div className="flex items-center gap-2 mb-3">
                 <Link size={14} className="text-violet-400" />
-                <h3 className={`text-sm font-semibold ${isDark ? 'text-zinc-200' : 'text-slate-900'}`}>Linked Incidents</h3>
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-zinc-200">Linked Incidents</h3>
               </div>
-              <p className={`text-3xl font-bold ${isDark ? 'text-zinc-100' : 'text-slate-900'}`}>{totalLinked}</p>
-              <p className={`text-xs mt-1 ${isDark ? 'text-zinc-500' : 'text-slate-500'}`}>Across {masterIncidents.length} master incidents</p>
+              <p className="text-3xl font-bold text-slate-900 dark:text-zinc-100">{totalLinked}</p>
+              <p className="text-xs mt-1 text-slate-500 dark:text-zinc-500">Across {masterIncidents.length} master incidents</p>
             </div>
-            <div className={`border rounded-xl p-5 ${isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'}`}>
+            <div className="border rounded-xl p-5 bg-white border-slate-200 dark:bg-zinc-900 dark:border-zinc-800">
               <div className="flex items-center gap-2 mb-3">
                 <Award size={14} className="text-amber-400" />
-                <h3 className={`text-sm font-semibold ${isDark ? 'text-zinc-200' : 'text-slate-900'}`}>Resolution Rate</h3>
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-zinc-200">Resolution Rate</h3>
               </div>
-              <p className={`text-3xl font-bold ${isDark ? 'text-zinc-100' : 'text-slate-900'}`}>
+              <p className="text-3xl font-bold text-slate-900 dark:text-zinc-100">
                 {issues.length > 0 ? Math.round((resolved / issues.length) * 100) : 0}%
               </p>
-              <p className={`text-xs mt-1 ${isDark ? 'text-zinc-500' : 'text-slate-500'}`}>{resolved} of {issues.length} issues resolved</p>
+              <p className="text-xs mt-1 text-slate-500 dark:text-zinc-500">{resolved} of {issues.length} issues resolved</p>
             </div>
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Recent Issues */}
-          <div className={`border rounded-xl p-5 ${isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'}`}>
+          <div className="border rounded-xl p-5 bg-white border-slate-200 dark:bg-zinc-900 dark:border-zinc-800">
             <div className="flex items-center justify-between mb-4">
-              <h2 className={`text-sm font-semibold ${isDark ? 'text-zinc-200' : 'text-slate-900'}`}>Recent Issues</h2>
-              <button onClick={() => navigate('/issues')} className={`text-xs flex items-center gap-1 transition-colors ${isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-slate-500 hover:text-slate-700'}`}>
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-zinc-200">Recent Issues</h2>
+              <button onClick={() => navigate('/issues')} className="text-xs flex items-center gap-1 transition-colors text-slate-500 hover:text-slate-700 dark:text-zinc-500 dark:hover:text-zinc-300">
                 View all <ArrowRight size={12} />
               </button>
             </div>
@@ -184,11 +181,11 @@ export const Dashboard: React.FC = () => {
                 <div
                   key={issue.id}
                   onClick={() => navigate(`/issues/${issue.id}`)}
-                  className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors group ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-slate-50'}`}
+                  className="flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors group hover:bg-slate-50 dark:hover:bg-zinc-800"
                 >
                   <div className="flex-1 min-w-0">
-                    <p className={`text-sm truncate font-medium ${isDark ? 'text-zinc-300 group-hover:text-white' : 'text-slate-700 group-hover:text-slate-900'}`}>{issue.title}</p>
-                    <p className={`text-xs mt-0.5 ${isDark ? 'text-zinc-600' : 'text-slate-500'}`}>{formatRelativeTime(issue.createdAt)}</p>
+                    <p className="text-sm truncate font-medium text-slate-700 group-hover:text-slate-900 dark:text-zinc-300 dark:group-hover:text-white">{issue.title}</p>
+                    <p className="text-xs mt-0.5 text-slate-500 dark:text-zinc-600">{formatRelativeTime(issue.createdAt)}</p>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <SeverityBadge severity={issue.severity} size="sm" />
@@ -200,35 +197,35 @@ export const Dashboard: React.FC = () => {
           </div>
 
           {/* Most Reused Resolutions */}
-          <div className={`border rounded-xl p-5 ${isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'}`}>
+          <div className="border rounded-xl p-5 bg-white border-slate-200 dark:bg-zinc-900 dark:border-zinc-800">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <BarChart3 size={14} className="text-amber-400" />
-                <h2 className={`text-sm font-semibold ${isDark ? 'text-zinc-200' : 'text-slate-900'}`}>Most Referenced</h2>
+                <h2 className="text-sm font-semibold text-slate-900 dark:text-zinc-200">Most Referenced</h2>
               </div>
-              <button onClick={() => navigate('/resolution-library')} className={`text-xs flex items-center gap-1 transition-colors ${isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-slate-500 hover:text-slate-700'}`}>
+              <button onClick={() => navigate('/resolution-library')} className="text-xs flex items-center gap-1 transition-colors text-slate-500 hover:text-slate-700 dark:text-zinc-500 dark:hover:text-zinc-300">
                 Library <ArrowRight size={12} />
               </button>
             </div>
             {mostReused.length === 0 ? (
-              <p className={`text-sm text-center py-8 ${isDark ? 'text-zinc-600' : 'text-slate-500'}`}>No referenced issues yet.</p>
+              <p className="text-sm text-center py-8 text-slate-500 dark:text-zinc-600">No referenced issues yet.</p>
             ) : (
               <div className="space-y-2">
                 {mostReused.map(issue => (
                   <div
                     key={issue.id}
                     onClick={() => navigate(`/issues/${issue.id}`)}
-                    className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors group ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-slate-50'}`}
+                    className="flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors group hover:bg-slate-50 dark:hover:bg-zinc-800"
                   >
                     <div className="flex-1 min-w-0">
-                      <p className={`text-sm truncate font-medium ${isDark ? 'text-zinc-300 group-hover:text-white' : 'text-slate-700 group-hover:text-slate-900'}`}>{issue.title}</p>
+                      <p className="text-sm truncate font-medium text-slate-700 group-hover:text-slate-900 dark:text-zinc-300 dark:group-hover:text-white">{issue.title}</p>
                       <div className="flex items-center gap-2 mt-1">
                         {issue.resolution && <ConfidenceBadge issue={issue} size="sm" />}
                       </div>
                     </div>
                     <div className="text-right flex-shrink-0">
                       <span className="text-sm font-bold text-amber-400">{issue.referenceCount}</span>
-                      <p className={`text-xs ${isDark ? 'text-zinc-600' : 'text-slate-500'}`}>refs</p>
+                      <p className="text-xs text-slate-500 dark:text-zinc-600">refs</p>
                     </div>
                   </div>
                 ))}

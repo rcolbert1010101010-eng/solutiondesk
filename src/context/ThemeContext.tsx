@@ -26,13 +26,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     try { localStorage.setItem('rd-theme', theme); } catch {}
     const root = document.documentElement;
-    if (theme === 'light') {
-      root.classList.add('light-theme');
-      root.classList.remove('dark-theme');
-    } else {
-      root.classList.add('dark-theme');
-      root.classList.remove('light-theme');
-    }
+    root.classList.toggle('dark', theme === 'dark');
   }, [theme]);
 
   const toggleTheme = () => setThemeState(t => t === 'dark' ? 'light' : 'dark');

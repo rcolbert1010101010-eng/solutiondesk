@@ -1,12 +1,9 @@
 import React, { useState } from 'react';
 import { useAuth, Role } from '../context/AuthContext';
-import { useTheme } from '../context/ThemeContext';
 import { Users, PlusCircle, Mail, Lock, Shield, CheckCircle2, AlertCircle, Eye, EyeOff, UserCheck, UserX } from 'lucide-react';
 
 export const UserManagement: React.FC = () => {
   const { currentUser, getUsers, createUser } = useAuth();
-  const { theme } = useTheme();
-  const isDark = theme === 'dark';
 
   const [showForm, setShowForm] = useState(false);
   const [formEmail, setFormEmail] = useState('');
@@ -20,9 +17,7 @@ export const UserManagement: React.FC = () => {
   // Access denied for non-admins
   if (!currentUser || currentUser.role !== 'admin') {
     return (
-      <div className={`flex-1 flex flex-col items-center justify-center gap-4 p-8 ${
-        isDark ? 'text-zinc-400' : 'text-slate-500'
-      }`}>
+      <div className="flex-1 flex flex-col items-center justify-center gap-4 p-8 text-slate-500 dark:text-zinc-400">
         <Shield size={48} className="text-slate-300" />
         <h2 className="text-xl font-semibold">Access Denied</h2>
         <p className="text-sm text-center max-w-xs">You don't have permission to view this page. Admin access is required.</p>
@@ -63,28 +58,21 @@ export const UserManagement: React.FC = () => {
     }
   };
 
-  const card = isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200 shadow-sm';
-  const inputCls = isDark
-    ? 'bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 focus:border-amber-500/50 focus:ring-amber-500/20'
-    : 'bg-white border-slate-300 text-slate-800 placeholder:text-slate-400 focus:border-amber-400 focus:ring-amber-400/20';
-  const labelCls = isDark ? 'text-zinc-400' : 'text-slate-600';
-  const headingCls = isDark ? 'text-zinc-100' : 'text-slate-800';
-  const mutedCls = isDark ? 'text-zinc-500' : 'text-slate-400';
-  const tableBorder = isDark ? 'border-zinc-800' : 'border-slate-200';
-  const theadCls = isDark ? 'text-zinc-500 border-zinc-800' : 'text-slate-400 border-slate-200';
-  const rowHover = isDark ? 'hover:bg-zinc-800/40' : 'hover:bg-slate-50';
-  const divider = isDark ? 'divide-zinc-800/60' : 'divide-slate-100';
+  const card = 'bg-white border-slate-200 shadow-sm dark:bg-zinc-900 dark:border-zinc-800 dark:shadow-none';
+  const inputCls = 'bg-white border-slate-300 text-slate-800 placeholder:text-slate-400 focus:border-amber-400 focus:ring-amber-400/20 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-amber-500/50 dark:focus:ring-amber-500/20';
+  const labelCls = 'text-slate-600 dark:text-zinc-400';
+  const headingCls = 'text-slate-800 dark:text-zinc-100';
+  const mutedCls = 'text-slate-400 dark:text-zinc-500';
+  const theadCls = 'text-slate-400 border-slate-200 dark:text-zinc-500 dark:border-zinc-800';
+  const rowHover = 'hover:bg-slate-50 dark:hover:bg-zinc-800/40';
+  const divider = 'divide-slate-100 dark:divide-zinc-800/60';
 
   return (
-    <div className={`flex-1 flex flex-col min-h-0 ${
-      isDark ? 'bg-[#0f0f10]' : 'bg-slate-100'
-    }`}>
+    <div className="flex-1 flex flex-col min-h-0 bg-slate-100 dark:bg-[#0f0f10]">
       <div className="p-6 pb-0">
         <div className="flex items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-lg ${
-              isDark ? 'bg-amber-400/10' : 'bg-amber-50'
-            }`}>
+            <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-400/10">
               <Users size={20} className="text-amber-500" />
             </div>
             <div>
@@ -126,7 +114,7 @@ export const UserManagement: React.FC = () => {
                   <label className={`block text-xs font-medium mb-1.5 ${labelCls}`}>Email address *</label>
                   <div className="relative">
                     <Mail size={14} className={`absolute left-3 top-1/2 -translate-y-1/2 ${
-                      isDark ? 'text-zinc-500' : 'text-slate-400'
+                      'text-slate-400 dark:text-zinc-500'
                     }`} />
                     <input
                       type="email"
@@ -143,7 +131,7 @@ export const UserManagement: React.FC = () => {
                   <label className={`block text-xs font-medium mb-1.5 ${labelCls}`}>Password *</label>
                   <div className="relative">
                     <Lock size={14} className={`absolute left-3 top-1/2 -translate-y-1/2 ${
-                      isDark ? 'text-zinc-500' : 'text-slate-400'
+                      'text-slate-400 dark:text-zinc-500'
                     }`} />
                     <input
                       type={showPassword ? 'text' : 'password'}
@@ -155,9 +143,7 @@ export const UserManagement: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setShowPassword(v => !v)}
-                      className={`absolute right-2.5 top-1/2 -translate-y-1/2 transition-colors ${
-                        isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-slate-400 hover:text-slate-600'
-                      }`}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 transition-colors text-slate-400 hover:text-slate-600 dark:text-zinc-500 dark:hover:text-zinc-300"
                       tabIndex={-1}
                     >
                       {showPassword ? <EyeOff size={13} /> : <Eye size={13} />}
@@ -171,11 +157,7 @@ export const UserManagement: React.FC = () => {
                   <select
                     value={formRole}
                     onChange={e => setFormRole(e.target.value as Role)}
-                    className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 transition-colors ${
-                      isDark
-                        ? 'bg-zinc-800 border-zinc-700 text-zinc-100 focus:border-amber-500/50 focus:ring-amber-500/20'
-                        : 'bg-white border-slate-300 text-slate-800 focus:border-amber-400 focus:ring-amber-400/20'
-                    }`}
+                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 transition-colors bg-white border-slate-300 text-slate-800 focus:border-amber-400 focus:ring-amber-400/20 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-100 dark:focus:border-amber-500/50 dark:focus:ring-amber-500/20"
                   >
                     <option value="member">Member</option>
                     <option value="admin">Admin</option>
@@ -194,9 +176,7 @@ export const UserManagement: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => { setShowForm(false); setFormError(''); setFormSuccess(''); setFormEmail(''); setFormPassword(''); setFormRole('member'); }}
-                  className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    isDark ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
-                  }`}
+                  className="px-5 py-2 rounded-lg text-sm font-medium transition-colors bg-slate-100 hover:bg-slate-200 text-slate-600 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-300"
                 >
                   Cancel
                 </button>
@@ -226,17 +206,15 @@ export const UserManagement: React.FC = () => {
                       <div className="flex items-center gap-2">
                         <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
                           user.role === 'admin'
-                            ? isDark ? 'bg-amber-400/20 text-amber-400' : 'bg-amber-100 text-amber-600'
-                            : isDark ? 'bg-zinc-700 text-zinc-300' : 'bg-slate-100 text-slate-600'
+                            ? 'bg-amber-100 text-amber-600 dark:bg-amber-400/20 dark:text-amber-400'
+                            : 'bg-slate-100 text-slate-600 dark:bg-zinc-700 dark:text-zinc-300'
                         }`}>
                           {user.email.charAt(0).toUpperCase()}
                         </div>
-                        <span className={`text-sm ${
-                          isDark ? 'text-zinc-200' : 'text-slate-700'
-                        }`}>{user.email}</span>
+                        <span className="text-sm text-slate-700 dark:text-zinc-200">{user.email}</span>
                         {user.id === currentUser.id && (
                           <span className={`text-xs px-1.5 py-0.5 rounded-full ${
-                            isDark ? 'bg-zinc-700 text-zinc-400' : 'bg-slate-100 text-slate-500'
+                            'bg-slate-100 text-slate-500 dark:bg-zinc-700 dark:text-zinc-400'
                           }`}>you</span>
                         )}
                       </div>
@@ -244,21 +222,15 @@ export const UserManagement: React.FC = () => {
                     <td className="py-3.5 px-4">
                       <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium border ${
                         user.role === 'admin'
-                          ? isDark
-                            ? 'bg-amber-400/10 text-amber-400 border-amber-500/20'
-                            : 'bg-amber-50 text-amber-600 border-amber-200'
-                          : isDark
-                            ? 'bg-zinc-800 text-zinc-400 border-zinc-700'
-                            : 'bg-slate-100 text-slate-500 border-slate-200'
+                          ? 'bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-400/10 dark:text-amber-400 dark:border-amber-500/20'
+                          : 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700'
                       }`}>
                         {user.role === 'admin' && <Shield size={10} />}
                         {user.role}
                       </span>
                     </td>
                     <td className="py-3.5 px-4">
-                      <span className={`text-xs ${
-                        isDark ? 'text-zinc-500' : 'text-slate-400'
-                      }`}>{formatDate(user.createdAt)}</span>
+                      <span className="text-xs text-slate-400 dark:text-zinc-500">{formatDate(user.createdAt)}</span>
                     </td>
                     <td className="py-3.5 px-4">
                       {user.active ? (
