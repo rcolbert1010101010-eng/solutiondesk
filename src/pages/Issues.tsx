@@ -9,6 +9,7 @@ import { SemanticSearchPanel } from '../components/SemanticSearchPanel';
 import { semanticSearch, SemanticMatch } from '../lib/semanticSearch';
 import { SemanticMatchCard } from '../components/SemanticMatchCard';
 import { Search, PlusCircle, SlidersHorizontal, LayoutGrid, List, X, Tag as TagIcon, Zap, ChevronDown } from 'lucide-react';
+import { Card } from '../components/ui/Card';
 
 type ViewMode = 'table' | 'grid';
 type SearchMode = 'keyword' | 'semantic';
@@ -202,7 +203,7 @@ export const Issues: React.FC = () => {
 
           {/* Expanded Filters */}
           {showFilters && (
-            <div className={`flex flex-wrap gap-4 p-4 border rounded-xl bg-white border-slate-200 dark:bg-zinc-900 dark:border-zinc-800`}>
+            <Card className="flex flex-wrap gap-4 p-4">
               {/* Status */}
               <div className="flex flex-col gap-1.5">
                 <label className={`text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-zinc-500`}>Status</label>
@@ -278,7 +279,7 @@ export const Issues: React.FC = () => {
                   <X size={11} /> Clear filters
                 </button>
               )}
-            </div>
+            </Card>
           )}
         </div>
 

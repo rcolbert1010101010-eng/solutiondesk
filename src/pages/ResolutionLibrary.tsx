@@ -19,6 +19,7 @@ import {
   X,
   Filter
 } from 'lucide-react';
+import { Card } from '../components/ui/Card';
 
 export const ResolutionLibrary: React.FC = () => {
   const [issues, setIssues] = useState<Issue[]>([]);
@@ -68,18 +69,18 @@ export const ResolutionLibrary: React.FC = () => {
 
         {/* Stats */}
         <div className="grid grid-cols-3 gap-4 mb-6">
-          <div className={`border rounded-xl p-4 bg-white border-slate-200 dark:bg-zinc-900 dark:border-zinc-800`}>
+          <Card className="p-4">
             <div className={`text-2xl font-bold text-slate-900 dark:text-zinc-100`}>{withResolution.length}</div>
             <div className={`text-xs mt-1 text-slate-500 dark:text-zinc-500`}>Documented Resolutions</div>
-          </div>
-          <div className={`border rounded-xl p-4 bg-white border-slate-200 dark:bg-zinc-900 dark:border-zinc-800`}>
+          </Card>
+          <Card className="p-4">
             <div className="text-2xl font-bold text-violet-400">{masterCount}</div>
             <div className={`text-xs mt-1 text-slate-500 dark:text-zinc-500`}>Master Incidents</div>
-          </div>
-          <div className={`border rounded-xl p-4 bg-white border-slate-200 dark:bg-zinc-900 dark:border-zinc-800`}>
+          </Card>
+          <Card className="p-4">
             <div className="text-2xl font-bold text-emerald-400">{resolvedIssues.length}</div>
             <div className={`text-xs mt-1 text-slate-500 dark:text-zinc-500`}>Resolved Issues</div>
-          </div>
+          </Card>
         </div>
 
         {/* Search Mode Toggle */}
@@ -179,10 +180,10 @@ export const ResolutionLibrary: React.FC = () => {
               </div>
             ) : (
               displayIssues.map(issue => (
-                <div
+                <Card
                   key={issue.id}
                   onClick={() => navigate(`/issues/${issue.id}`)}
-                  className={`border rounded-xl p-4 cursor-pointer transition-all bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50 dark:bg-zinc-900 dark:border-zinc-800 dark:hover:border-zinc-600 dark:hover:bg-zinc-800/50`}
+                  className="p-4 cursor-pointer transition-all hover:border-slate-300 hover:bg-slate-50 dark:hover:border-zinc-600 dark:hover:bg-zinc-800/50"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
@@ -229,7 +230,7 @@ export const ResolutionLibrary: React.FC = () => {
                       </div>
                     )}
                   </div>
-                </div>
+                </Card>
               ))
             )}
           </div>

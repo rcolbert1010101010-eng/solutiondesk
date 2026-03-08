@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth, Role } from '../context/AuthContext';
 import { Users, PlusCircle, Mail, Lock, Shield, CheckCircle2, AlertCircle, Eye, EyeOff, UserCheck, UserX } from 'lucide-react';
+import { Card, CardTitle } from '../components/ui/Card';
 
 export const UserManagement: React.FC = () => {
   const { currentUser, getUsers, createUser } = useAuth();
@@ -58,7 +59,7 @@ export const UserManagement: React.FC = () => {
     }
   };
 
-  const card = 'bg-white border-slate-200 shadow-sm dark:bg-zinc-900 dark:border-zinc-800 dark:shadow-none';
+  const card = 'shadow-sm dark:shadow-none';
   const inputCls = 'bg-white border-slate-300 text-slate-800 placeholder:text-slate-400 focus:border-amber-400 focus:ring-amber-400/20 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-amber-500/50 dark:focus:ring-amber-500/20';
   const labelCls = 'text-slate-600 dark:text-zinc-400';
   const headingCls = 'text-slate-800 dark:text-zinc-100';
@@ -91,8 +92,8 @@ export const UserManagement: React.FC = () => {
 
         {/* Create User Form */}
         {showForm && (
-          <div className={`border rounded-xl p-6 mb-6 ${card}`}>
-            <h2 className={`text-sm font-semibold mb-4 ${headingCls}`}>Create New User</h2>
+          <Card className={`p-6 mb-6 ${card}`}>
+            <CardTitle className="mb-4">Create New User</CardTitle>
 
             {formError && (
               <div className="flex items-start gap-2.5 bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 mb-4 text-sm">
@@ -182,13 +183,13 @@ export const UserManagement: React.FC = () => {
                 </button>
               </div>
             </form>
-          </div>
+          </Card>
         )}
       </div>
 
       {/* Users Table */}
       <div className="px-6 pb-6 flex-1">
-        <div className={`border rounded-xl overflow-hidden ${card}`}>
+        <Card className={`overflow-hidden ${card}`}>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[540px]">
               <thead>
@@ -254,7 +255,7 @@ export const UserManagement: React.FC = () => {
               <p className={`text-sm ${mutedCls}`}>No users found.</p>
             </div>
           )}
-        </div>
+        </Card>
       </div>
     </div>
   );

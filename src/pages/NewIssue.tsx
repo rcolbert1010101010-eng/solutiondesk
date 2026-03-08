@@ -18,6 +18,7 @@ import {
   Loader2,
   Zap
 } from 'lucide-react';
+import { Card } from '../components/ui/Card';
 
 const SEVERITY_OPTIONS: Severity[] = ['Low', 'Medium', 'High', 'Critical'];
 
@@ -261,7 +262,7 @@ export const NewIssue: React.FC = () => {
           {/* Suggestions Panel */}
           <div className="lg:col-span-2">
             <div className="sticky top-6">
-              <div className={`border rounded-xl overflow-hidden bg-white border-slate-200 dark:bg-zinc-900 dark:border-zinc-800`}>
+              <Card className="overflow-hidden">
                 <div className={`flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-zinc-800`}>
                   <div className="flex items-center gap-2">
                     <div className="w-5 h-5 bg-amber-400/10 rounded-md flex items-center justify-center">
@@ -312,7 +313,7 @@ export const NewIssue: React.FC = () => {
                     )}
                   </div>
                 )}
-              </div>
+              </Card>
             </div>
           </div>
         </div>

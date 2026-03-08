@@ -22,6 +22,7 @@ import { SeverityBadge } from '../components/SeverityBadge';
 import { TagBadge } from '../components/TagBadge';
 import { ConfidenceBadge } from '../components/ConfidenceBadge';
 import { formatDate, formatRelativeTime } from '../lib/utils';
+import { Card, CardTitle } from '../components/ui/Card';
 import {
   ArrowLeft,
   Edit3,
@@ -300,7 +301,7 @@ export const IssueDetail: React.FC = () => {
         )}
 
         {/* Main Card */}
-        <div className={`border rounded-xl p-6 mb-6 bg-white border-slate-200 dark:bg-zinc-900 dark:border-zinc-800`}>
+        <Card className="p-6 mb-6">
           {/* Header */}
           <div className="flex items-start justify-between gap-4 mb-4">
             <div className="flex-1 min-w-0">
@@ -457,14 +458,14 @@ export const IssueDetail: React.FC = () => {
               </button>
             </div>
           )}
-        </div>
+        </Card>
 
         {/* Master Incident Controls */}
-        <div className={`border rounded-xl p-5 mb-6 bg-white border-slate-200 dark:bg-zinc-900 dark:border-zinc-800`}>
+        <Card className="p-5 mb-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <Star size={15} className="text-violet-400" />
-              <h2 className={`text-sm font-semibold text-slate-900 dark:text-zinc-200`}>Master Incident</h2>
+              <CardTitle>Master Incident</CardTitle>
             </div>
             {issue.isMasterIncident ? (
               <button
@@ -557,14 +558,14 @@ export const IssueDetail: React.FC = () => {
               )}
             </div>
           )}
-        </div>
+        </Card>
 
         {/* Resolutions */}
-        <div className={`border rounded-xl p-5 mb-6 bg-white border-slate-200 dark:bg-zinc-900 dark:border-zinc-800`}>
+        <Card className="p-5 mb-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <BookOpen size={15} className="text-amber-400" />
-              <h2 className={`text-sm font-semibold text-slate-900 dark:text-zinc-200`}>Resolutions</h2>
+              <CardTitle>Resolutions</CardTitle>
               {issue.resolutions && issue.resolutions.length > 0 && (
                 <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
                   {issue.resolutions.length}
@@ -581,7 +582,7 @@ export const IssueDetail: React.FC = () => {
           </div>
 
           {showResolutionForm && (
-            <div className={`mb-4 p-4 rounded-lg border bg-slate-50 border-slate-200 dark:bg-zinc-800/50 dark:border-zinc-700`}>
+            <Card variant="muted" className="mb-4 p-4">
               <p className={`text-xs font-semibold mb-3 text-slate-900 dark:text-zinc-300`}>New Resolution</p>
               <div className="space-y-3">
                 <div>
@@ -627,13 +628,13 @@ export const IssueDetail: React.FC = () => {
                   </button>
                 </div>
               </div>
-            </div>
+            </Card>
           )}
 
           {issue.resolutions && issue.resolutions.length > 0 ? (
             <div className="space-y-3">
               {issue.resolutions.map((res, idx) => (
-                <div key={res.id ?? idx} className={`p-4 rounded-lg border bg-slate-50 border-slate-200 dark:bg-zinc-800/40 dark:border-zinc-700/50`}>
+                <Card key={res.id ?? idx} variant="muted" className="p-4">
                   <div className="flex items-start justify-between mb-2">
                     <h3 className={`text-sm font-semibold text-slate-900 dark:text-zinc-200`}>{res.title}</h3>
                     <div className="flex items-center gap-2">
@@ -663,19 +664,19 @@ export const IssueDetail: React.FC = () => {
                   {res.createdAt && (
                     <p className={`text-xs mt-2 text-slate-400 dark:text-zinc-600`}>{formatRelativeTime(res.createdAt)}</p>
                   )}
-                </div>
+                </Card>
               ))}
             </div>
           ) : (
             <p className={`text-xs text-slate-500 dark:text-zinc-500`}>No resolutions documented yet. Add one to help future troubleshooting.</p>
           )}
-        </div>
+        </Card>
 
         {/* Confidence Info */}
-        <div className={`border rounded-xl p-5 bg-white border-slate-200 dark:bg-zinc-900 dark:border-zinc-800`}>
+        <Card className="p-5">
           <div className="flex items-center gap-2 mb-3">
             <Shield size={15} className="text-zinc-400" />
-            <h2 className={`text-sm font-semibold text-slate-900 dark:text-zinc-200`}>Confidence Score</h2>
+            <CardTitle>Confidence Score</CardTitle>
           </div>
           <div className="flex items-center gap-3 mb-3">
             <div className={`flex-1 h-2 rounded-full overflow-hidden bg-slate-200 dark:bg-zinc-800`}>
@@ -715,13 +716,13 @@ export const IssueDetail: React.FC = () => {
               </span>
             </div>
           </div>
-        </div>
+        </Card>
       </div>
 
       {/* Link Modal */}
       {showLinkModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className={`border rounded-2xl w-full max-w-md shadow-2xl bg-white border-slate-200 dark:bg-zinc-900 dark:border-zinc-700`}>
+          <Card className="rounded-2xl w-full max-w-md shadow-2xl border-slate-200 dark:border-zinc-700">
             <div className={`flex items-center justify-between p-5 border-b border-slate-200 dark:border-zinc-800`}>
               <div className="flex items-center gap-2">
                 <Link2 size={16} className="text-blue-400" />
@@ -791,7 +792,7 @@ export const IssueDetail: React.FC = () => {
                 </button>
               </div>
             </div>
-          </div>
+          </Card>
         </div>
       )}
     </div>

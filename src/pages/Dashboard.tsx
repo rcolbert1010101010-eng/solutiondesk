@@ -20,6 +20,7 @@ import {
   Award,
   BarChart3
 } from 'lucide-react';
+import { Card, CardTitle } from '../components/ui/Card';
 
 export const Dashboard: React.FC = () => {
   const [issues, setIssues] = useState<Issue[]>([]);
@@ -102,11 +103,11 @@ export const Dashboard: React.FC = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
           {/* Master Incidents */}
-          <div className="lg:col-span-2 border rounded-xl p-5 bg-white border-slate-200 dark:bg-zinc-900 dark:border-zinc-800">
+          <Card className="lg:col-span-2 p-5">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <Star size={16} className="text-violet-400" fill="currentColor" />
-                <h2 className="text-sm font-semibold text-slate-900 dark:text-zinc-200">Master Incidents</h2>
+                <CardTitle>Master Incidents</CardTitle>
                 <span className="text-xs bg-violet-500/15 text-violet-400 border border-violet-500/25 px-1.5 py-0.5 rounded-full">{masterIncidents.length}</span>
               </div>
               <button onClick={() => navigate('/issues')} className="text-xs flex items-center gap-1 transition-colors text-slate-500 hover:text-slate-700 dark:text-zinc-500 dark:hover:text-zinc-300">
@@ -142,36 +143,36 @@ export const Dashboard: React.FC = () => {
                 ))}
               </div>
             )}
-          </div>
+          </Card>
 
           {/* Stats */}
           <div className="flex flex-col gap-4">
-            <div className="border rounded-xl p-5 bg-white border-slate-200 dark:bg-zinc-900 dark:border-zinc-800">
+            <Card className="p-5">
               <div className="flex items-center gap-2 mb-3">
                 <Link size={14} className="text-violet-400" />
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-zinc-200">Linked Incidents</h3>
+                <CardTitle>Linked Incidents</CardTitle>
               </div>
               <p className="text-3xl font-bold text-slate-900 dark:text-zinc-100">{totalLinked}</p>
               <p className="text-xs mt-1 text-slate-500 dark:text-zinc-500">Across {masterIncidents.length} master incidents</p>
-            </div>
-            <div className="border rounded-xl p-5 bg-white border-slate-200 dark:bg-zinc-900 dark:border-zinc-800">
+            </Card>
+            <Card className="p-5">
               <div className="flex items-center gap-2 mb-3">
                 <Award size={14} className="text-amber-400" />
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-zinc-200">Resolution Rate</h3>
+                <CardTitle>Resolution Rate</CardTitle>
               </div>
               <p className="text-3xl font-bold text-slate-900 dark:text-zinc-100">
                 {issues.length > 0 ? Math.round((resolved / issues.length) * 100) : 0}%
               </p>
               <p className="text-xs mt-1 text-slate-500 dark:text-zinc-500">{resolved} of {issues.length} issues resolved</p>
-            </div>
+            </Card>
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Recent Issues */}
-          <div className="border rounded-xl p-5 bg-white border-slate-200 dark:bg-zinc-900 dark:border-zinc-800">
+          <Card className="p-5">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-semibold text-slate-900 dark:text-zinc-200">Recent Issues</h2>
+              <CardTitle>Recent Issues</CardTitle>
               <button onClick={() => navigate('/issues')} className="text-xs flex items-center gap-1 transition-colors text-slate-500 hover:text-slate-700 dark:text-zinc-500 dark:hover:text-zinc-300">
                 View all <ArrowRight size={12} />
               </button>
@@ -194,14 +195,14 @@ export const Dashboard: React.FC = () => {
                 </div>
               ))}
             </div>
-          </div>
+          </Card>
 
           {/* Most Reused Resolutions */}
-          <div className="border rounded-xl p-5 bg-white border-slate-200 dark:bg-zinc-900 dark:border-zinc-800">
+          <Card className="p-5">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <BarChart3 size={14} className="text-amber-400" />
-                <h2 className="text-sm font-semibold text-slate-900 dark:text-zinc-200">Most Referenced</h2>
+                <CardTitle>Most Referenced</CardTitle>
               </div>
               <button onClick={() => navigate('/resolution-library')} className="text-xs flex items-center gap-1 transition-colors text-slate-500 hover:text-slate-700 dark:text-zinc-500 dark:hover:text-zinc-300">
                 Library <ArrowRight size={12} />
@@ -231,7 +232,7 @@ export const Dashboard: React.FC = () => {
                 ))}
               </div>
             )}
-          </div>
+          </Card>
         </div>
       </div>
     </div>
