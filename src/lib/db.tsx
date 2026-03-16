@@ -1,4 +1,5 @@
-import { Issue, Status, Severity, Resolution, Tag, IssueRelationship, RelationshipType } from '../types';
+import { Issue, Status, Severity, Resolution, TagReference, IssueRelationship, RelationshipType } from '../types';
+import { listTags } from './tags';
 
 const STORAGE_KEY = 'resolution_desk_issues';
 const RELATIONSHIPS_KEY = 'resolution_desk_relationships';
@@ -154,17 +155,47 @@ const defaultIssues: Issue[] = [
   }
 ];
 
+function canonicalizeIssueTags(tags?: TagReference[]): TagReference[] {
+  if (!tags || !Array.isArray(tags) || tags.length === 0) return [];
+
+  const availableTags = listTags();
+  const tagMap = new Map(availableTags.map(tag => [tag.name.toLowerCase(), tag.name]));
+  const resolved = tags
+    .map(tag => tagMap.get(tag.toLowerCase()))
+    .filter((tag): tag is string => Boolean(tag));
+
+  return Array.from(new Set(resolved));
+}
+
+function normalizeIssuesForTagCatalog(issues: Issue[]): { issues: Issue[]; changed: boolean } {
+  let changed = false;
+  const normalized = issues.map(issue => {
+    const currentTags = issue.tags ?? [];
+    const nextTags = canonicalizeIssueTags(currentTags);
+    const sameLength = currentTags.length === nextTags.length;
+    const sameContent = sameLength && currentTags.every((tag, idx) => tag === nextTags[idx]);
+    if (sameContent) return issue;
+    changed = true;
+    return { ...issue, tags: nextTags };
+  });
+  return { issues: normalized, changed };
+}
+
 function loadIssues(): Issue[] {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
-      return JSON.parse(stored);
+      const parsed = JSON.parse(stored) as Issue[];
+      const { issues, changed } = normalizeIssuesForTagCatalog(parsed);
+      if (changed) saveIssues(issues);
+      return issues;
     }
   } catch (e) {
     // ignore
   }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(defaultIssues));
-  return defaultIssues;
+  const { issues } = normalizeIssuesForTagCatalog(defaultIssues);
+  saveIssues(issues);
+  return issues;
 }
 
 function saveIssues(issues: Issue[]): void {
@@ -208,6 +239,7 @@ export function addIssue(newIssue: Omit<Issue, 'id' | 'createdAt'>): Issue {
   const newId = `ISS-${String(maxNum + 1).padStart(3, '0')}`;
   const issue: Issue = {
     ...newIssue,
+    tags: canonicalizeIssueTags(newIssue.tags),
     id: newId,
     createdAt: new Date().toISOString()
   };
@@ -220,7 +252,11 @@ export function updateIssue(id: string, updates: Partial<Issue>): Issue | undefi
   const issues = loadIssues();
   const idx = issues.findIndex(i => i.id === id);
   if (idx === -1) return undefined;
-  issues[idx] = { ...issues[idx], ...updates };
+  const normalizedUpdates = { ...updates };
+  if (updates.tags) {
+    normalizedUpdates.tags = canonicalizeIssueTags(updates.tags);
+  }
+  issues[idx] = { ...issues[idx], ...normalizedUpdates };
   saveIssues(issues);
   return issues[idx];
 }

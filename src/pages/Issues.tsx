@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getAllIssues } from '../lib/db';
-import { Issue, Status, Severity, Tag, ALL_TAGS } from '../types';
+import { Issue, Status, Severity, TagReference, Tag } from '../types';
 import { IssueTable } from '../components/IssueTable';
 import { IssueCard } from '../components/IssueCard';
 import { TagBadge } from '../components/TagBadge';
 import { SemanticSearchPanel } from '../components/SemanticSearchPanel';
 import { semanticSearch, SemanticMatch } from '../lib/semanticSearch';
 import { SemanticMatchCard } from '../components/SemanticMatchCard';
+import { listTags, TAGS_CHANGED_EVENT } from '../lib/tags';
 import { Search, PlusCircle, SlidersHorizontal, LayoutGrid, List, X, Tag as TagIcon, Zap, ChevronDown } from 'lucide-react';
 
 type ViewMode = 'table' | 'grid';
@@ -19,7 +20,8 @@ export const Issues: React.FC = () => {
   const [searchMode, setSearchMode] = useState<SearchMode>('keyword');
   const [statusFilter, setStatusFilter] = useState<Status | 'All'>('All');
   const [severityFilter, setSeverityFilter] = useState<Severity | 'All'>('All');
-  const [tagFilter, setTagFilter] = useState<Tag | 'All'>('All');
+  const [tagFilter, setTagFilter] = useState<TagReference | 'All'>('All');
+  const [availableTags, setAvailableTags] = useState<Tag[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [showFilters, setShowFilters] = useState(false);
   const [semanticResults, setSemanticResults] = useState<SemanticMatch[]>([]);
@@ -28,7 +30,19 @@ export const Issues: React.FC = () => {
 
   useEffect(() => {
     setIssues(getAllIssues());
+    const refreshTags = () => setAvailableTags(listTags());
+    refreshTags();
+    window.addEventListener(TAGS_CHANGED_EVENT, refreshTags);
+    return () => window.removeEventListener(TAGS_CHANGED_EVENT, refreshTags);
   }, []);
+
+  useEffect(() => {
+    if (tagFilter === 'All') return;
+    const exists = availableTags.some(tag => tag.name === tagFilter);
+    if (!exists) {
+      setTagFilter('All');
+    }
+  }, [availableTags, tagFilter]);
 
   // Run semantic search when in semantic mode
   useEffect(() => {
@@ -259,12 +273,14 @@ export const Issues: React.FC = () => {
                   >
                     All
                   </button>
-                  {ALL_TAGS.map(tag => (
+                  {availableTags.map(tag => (
                     <TagBadge
-                      key={tag}
-                      tag={tag}
-                      selected={tagFilter === tag}
-                      onClick={() => setTagFilter(tagFilter === tag ? 'All' : tag)}
+                      key={tag.id}
+                      tag={tag.name}
+                      label={tag.name}
+                      color={tag.color}
+                      selected={tagFilter === tag.name}
+                      onClick={() => setTagFilter(tagFilter === tag.name ? 'All' : tag.name)}
                     />
                   ))}
                 </div>

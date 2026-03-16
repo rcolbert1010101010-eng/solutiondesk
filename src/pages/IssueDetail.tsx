@@ -16,12 +16,13 @@ import {
   calculateConfidenceScore,
   incrementReferenceCount
 } from '../lib/db';
-import { Issue, Status, Severity, Resolution, Tag, ALL_TAGS, RelationshipType, IssueRelationship } from '../types';
+import { Issue, Status, Severity, TagReference, RelationshipType, IssueRelationship, Tag } from '../types';
 import { StatusBadge } from '../components/StatusBadge';
 import { SeverityBadge } from '../components/SeverityBadge';
 import { TagBadge } from '../components/TagBadge';
 import { ConfidenceBadge } from '../components/ConfidenceBadge';
 import { formatDate, formatRelativeTime } from '../lib/utils';
+import { listTags, TAGS_CHANGED_EVENT } from '../lib/tags';
 import {
   ArrowLeft,
   Edit3,
@@ -35,7 +36,6 @@ import {
   AlertTriangle,
   Clock,
   FileText,
-  Tag as TagIcon,
   Star,
   Link,
   Link2,
@@ -67,6 +67,7 @@ export const IssueDetail: React.FC = () => {
   const [linkedRelationships, setLinkedRelationships] = useState<IssueRelationship[]>([]);
   const [sourceRelationship, setSourceRelationship] = useState<IssueRelationship | undefined>();
   const [allIssues, setAllIssues] = useState<Issue[]>([]);
+  const [availableTags, setAvailableTags] = useState<Tag[]>([]);
   const [linkSearch, setLinkSearch] = useState('');
   const [selectedLinkTarget, setSelectedLinkTarget] = useState<string>('');
   const [selectedRelType, setSelectedRelType] = useState<RelationshipType>('duplicate');
@@ -79,7 +80,7 @@ export const IssueDetail: React.FC = () => {
     severity: 'Medium' as Severity,
     status: 'Open' as Status,
     assignee: '',
-    tags: [] as Tag[]
+    tags: [] as TagReference[]
   });
 
   const [resolutionForm, setResolutionForm] = useState({
@@ -112,6 +113,17 @@ export const IssueDetail: React.FC = () => {
   useEffect(() => {
     loadIssue();
     setAllIssues(getAllIssues());
+    setAvailableTags(listTags());
+  }, [id]);
+
+  useEffect(() => {
+    const refreshTags = () => {
+      setAvailableTags(listTags());
+      loadIssue();
+      setAllIssues(getAllIssues());
+    };
+    window.addEventListener(TAGS_CHANGED_EVENT, refreshTags);
+    return () => window.removeEventListener(TAGS_CHANGED_EVENT, refreshTags);
   }, [id]);
 
   if (!issue) {
@@ -209,7 +221,7 @@ export const IssueDetail: React.FC = () => {
     loadIssue();
   };
 
-  const toggleTag = (tag: Tag) => {
+  const toggleTag = (tag: TagReference) => {
     setEditForm(prev => ({
       ...prev,
       tags: prev.tags.includes(tag)
@@ -407,11 +419,13 @@ export const IssueDetail: React.FC = () => {
               <div>
                 <p className={`text-xs mb-2 text-slate-500 dark:text-zinc-500`}>Tags</p>
                 <div className="flex flex-wrap gap-1.5">
-                  {ALL_TAGS.map(tag => (
+                  {availableTags.map(tag => (
                     <TagBadge
-                      key={tag}
-                      tag={tag}
-                      selected={editForm.tags.includes(tag)}
+                      key={tag.id}
+                      tag={tag.name}
+                      label={tag.name}
+                      color={tag.color}
+                      selected={editForm.tags.includes(tag.name)}
                       onClick={toggleTag}
                     />
                   ))}

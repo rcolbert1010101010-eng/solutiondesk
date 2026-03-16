@@ -8,6 +8,7 @@ import { IssueDetail } from './pages/IssueDetail';
 import { ResolutionLibrary } from './pages/ResolutionLibrary';
 import { UserManagement } from './pages/UserManagement';
 import { LoginPage } from './pages/LoginPage';
+import { Tags } from './pages/Tags';
 import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
@@ -47,6 +48,7 @@ const AppShell: React.FC = () => {
           <Route path="/issues" element={<Issues />} />
           <Route path="/issues/:id" element={<IssueDetail />} />
           <Route path="/new-issue" element={<NewIssue />} />
+          <Route path="/tags" element={<Tags />} />
           <Route path="/resolution-library" element={<ResolutionLibrary />} />
           <Route
             path="/admin/users"

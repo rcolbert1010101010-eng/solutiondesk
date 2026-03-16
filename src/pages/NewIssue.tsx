@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { addIssue, getAllIssues } from '../lib/db';
-import { Severity, Tag, ALL_TAGS, Issue } from '../types';
+import { Severity, TagReference, Issue, Tag } from '../types';
 import { TagBadge } from '../components/TagBadge';
 import { SeverityBadge } from '../components/SeverityBadge';
 import { SemanticMatchCard } from '../components/SemanticMatchCard';
 import { semanticSearch, SemanticMatch } from '../lib/semanticSearch';
+import { listTags, TAGS_CHANGED_EVENT } from '../lib/tags';
 import {
   Save,
   X,
@@ -27,7 +28,8 @@ export const NewIssue: React.FC = () => {
   const [description, setDescription] = useState('');
   const [systemAffected, setSystemAffected] = useState('');
   const [severity, setSeverity] = useState<Severity>('Medium');
-  const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
+  const [selectedTags, setSelectedTags] = useState<TagReference[]>([]);
+  const [availableTags, setAvailableTags] = useState<Tag[]>([]);
   const [assignee, setAssignee] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -42,7 +44,16 @@ export const NewIssue: React.FC = () => {
 
   useEffect(() => {
     setAllIssues(getAllIssues());
+    const refreshTags = () => setAvailableTags(listTags());
+    refreshTags();
+    window.addEventListener(TAGS_CHANGED_EVENT, refreshTags);
+    return () => window.removeEventListener(TAGS_CHANGED_EVENT, refreshTags);
   }, []);
+
+  useEffect(() => {
+    const availableNames = new Set(availableTags.map(tag => tag.name));
+    setSelectedTags(prev => prev.filter(tag => availableNames.has(tag)));
+  }, [availableTags]);
 
   // Build search query from title + description + system
   const searchQuery = [title, description, systemAffected].filter(Boolean).join(' ');
@@ -69,7 +80,7 @@ export const NewIssue: React.FC = () => {
     };
   }, [searchQuery, allIssues]);
 
-  const toggleTag = (tag: Tag) => {
+  const toggleTag = (tag: TagReference) => {
     setSelectedTags(prev =>
       prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
     );
@@ -214,16 +225,24 @@ export const NewIssue: React.FC = () => {
               <label className={`block text-xs font-medium mb-1.5 text-slate-700 dark:text-zinc-400`}>
                 <span className="flex items-center gap-1"><TagIcon size={12} /> Tags</span>
               </label>
-              <div className="flex flex-wrap gap-2">
-                {ALL_TAGS.map(tag => (
-                  <TagBadge
-                    key={tag}
-                    tag={tag}
-                    selected={selectedTags.includes(tag)}
-                    onClick={toggleTag}
-                  />
-                ))}
-              </div>
+              {availableTags.length === 0 ? (
+                <p className="text-xs text-slate-500 dark:text-zinc-500">
+                  No tags available. Create one in Tag Management.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {availableTags.map(tag => (
+                    <TagBadge
+                      key={tag.id}
+                      tag={tag.name}
+                      label={tag.name}
+                      color={tag.color}
+                      selected={selectedTags.includes(tag.name)}
+                      onClick={toggleTag}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Assignee */}

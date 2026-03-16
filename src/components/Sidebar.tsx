@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   ListChecks,
   PlusCircle,
+  Tags as TagsIcon,
   Zap,
   Menu,
   X,
@@ -46,6 +47,7 @@ export const Sidebar: React.FC = () => {
   const navItems = [
     { to: '/', label: 'Dashboard', icon: LayoutDashboard, exact: true },
     { to: '/issues', label: 'Issues', icon: ListChecks, exact: false },
+    { to: '/tags', label: 'Tags', icon: TagsIcon, exact: false },
     { to: '/resolution-library', label: 'Resolution Library', icon: BookOpen, exact: false },
     { to: '/new-issue', label: 'New Issue', icon: PlusCircle, exact: false },
   ];

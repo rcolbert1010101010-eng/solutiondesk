@@ -1,26 +1,49 @@
 export type Status = 'Open' | 'Investigating' | 'Resolved' | 'Closed';
 export type Severity = 'Low' | 'Medium' | 'High' | 'Critical';
-export type Tag = 'network' | 'database' | 'authentication' | 'api' | 'permissions' | 'timeout' | 'deployment';
 export type RelationshipType = 'duplicate' | 'similar' | 'derived_from' | 'confirmed_same_root_cause';
 export type ConfidenceLevel = 'Low Confidence' | 'Medium Confidence' | 'High Confidence' | 'Proven Resolution';
 
-export const ALL_TAGS: Tag[] = ['network', 'database', 'authentication', 'api', 'permissions', 'timeout', 'deployment'];
+export type TagReference = string;
+
+export interface Tag {
+  id: string;
+  name: string;
+  color?: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface Resolution {
-  rootCause: string;
-  stepsTaken: string;
-  finalResolution: string;
-  preventionNotes: string;
-  resolvedAt: string;
+  id?: string;
+  title?: string;
+  summary?: string;
+  rootCause?: string;
+  steps?: string[] | string;
+  stepsTaken?: string;
+  finalResolution?: string;
+  preventionNotes?: string;
+  notes?: string;
+  createdAt?: string;
+  resolvedAt?: string;
+  resolvedBy?: string;
+  referenceCount?: number;
+  timeToResolve?: number;
+  timeToResolveMinutes?: number;
 }
 
 export interface IssueRelationship {
-  id: string;
-  source_issue_id: string;
-  master_issue_id: string;
-  relationship_type: RelationshipType;
-  linked_at: string;
-  linked_by: string;
+  id?: string;
+  sourceId?: string;
+  masterId?: string;
+  relationshipType?: RelationshipType;
+  linkedAt?: string;
+  type?: RelationshipType;
+  source_issue_id?: string;
+  master_issue_id?: string;
+  relationship_type?: RelationshipType;
+  linked_at?: string;
+  linked_by?: string;
+  createdAt?: string;
 }
 
 export interface Issue {
@@ -31,9 +54,11 @@ export interface Issue {
   severity: Severity;
   status: Status;
   createdAt: string;
+  updatedAt?: string;
   assignee?: string;
-  tags?: Tag[];
+  tags?: TagReference[];
   resolution?: Resolution;
+  resolutions?: Resolution[];
   isMasterIncident?: boolean;
   masterIncidentId?: string;
   linkedIncidentCount?: number;
