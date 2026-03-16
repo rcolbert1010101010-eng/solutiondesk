@@ -55,6 +55,43 @@ const RELATIONSHIP_LABELS: Record<RelationshipType, string> = {
   confirmed_same_root_cause: 'Same Root Cause'
 };
 
+function toStepText(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function normalizeSteps(steps: unknown): string[] {
+  if (Array.isArray(steps)) {
+    return steps
+      .map(step => toStepText(step))
+      .filter(step => step.length > 0);
+  }
+
+  if (typeof steps === 'string') {
+    const lines = steps
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(line => line.length > 0);
+    if (lines.length > 1) return lines;
+    const single = steps.trim();
+    return single ? [single] : [];
+  }
+
+  if (steps && typeof steps === 'object') {
+    return Object.values(steps as Record<string, unknown>)
+      .map(value => toStepText(value))
+      .filter(step => step.length > 0);
+  }
+
+  return [];
+}
+
 export const IssueDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -233,6 +270,7 @@ export const IssueDetail: React.FC = () => {
   const isResolved = issue.status === 'Resolved' || issue.status === 'Closed';
   const confidence = getConfidenceLevel(issue);
   const confidenceScore = calculateConfidenceScore(issue);
+  const issueResolutions = Array.isArray(issue.resolutions) ? issue.resolutions : [];
 
   const linkableMasters = allIssues.filter(i =>
     i.id !== issue.id &&
@@ -431,7 +469,7 @@ export const IssueDetail: React.FC = () => {
                   ))}
                 </div>
               </div>
-            ) : issue.tags && issue.tags.length > 0 ? (
+            ) : Array.isArray(issue.tags) && issue.tags.length > 0 ? (
               <div className="flex flex-wrap gap-1.5">
                 {issue.tags.map(tag => <TagBadge key={tag} tag={tag} />)}
               </div>
@@ -579,9 +617,9 @@ export const IssueDetail: React.FC = () => {
             <div className="flex items-center gap-2">
               <BookOpen size={15} className="text-amber-400" />
               <h2 className={`text-sm font-semibold text-slate-900 dark:text-zinc-200`}>Resolutions</h2>
-              {issue.resolutions && issue.resolutions.length > 0 && (
+              {issueResolutions.length > 0 && (
                 <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                  {issue.resolutions.length}
+                  {issueResolutions.length}
                 </span>
               )}
             </div>
@@ -644,41 +682,48 @@ export const IssueDetail: React.FC = () => {
             </div>
           )}
 
-          {issue.resolutions && issue.resolutions.length > 0 ? (
+          {issueResolutions.length > 0 ? (
             <div className="space-y-3">
-              {issue.resolutions.map((res, idx) => (
-                <div key={res.id ?? idx} className={`p-4 rounded-lg border bg-slate-50 border-slate-200 dark:bg-zinc-800/40 dark:border-zinc-700/50`}>
-                  <div className="flex items-start justify-between mb-2">
-                    <h3 className={`text-sm font-semibold text-slate-900 dark:text-zinc-200`}>{res.title}</h3>
-                    <div className="flex items-center gap-2">
-                      {(res.referenceCount ?? 0) > 0 && (
-                        <span className={`text-xs text-slate-500 dark:text-zinc-500`}>{res.referenceCount} use{res.referenceCount !== 1 ? 's' : ''}</span>
-                      )}
-                      <button
-                        onClick={() => handleIncrementReference(res.id ?? '')}
-                        className={`flex items-center gap-1 text-xs px-2 py-1 rounded transition-colors bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200 dark:bg-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-600 dark:hover:text-zinc-200`}
-                        title="Mark as used"
-                      >
-                        <BookOpen size={10} /> Used
-                      </button>
+              {issueResolutions.map((res, idx) => {
+                const steps = normalizeSteps(res.steps);
+                return (
+                  <div key={res.id ?? idx} className={`p-4 rounded-lg border bg-slate-50 border-slate-200 dark:bg-zinc-800/40 dark:border-zinc-700/50`}>
+                    <div className="flex items-start justify-between mb-2">
+                      <h3 className={`text-sm font-semibold text-slate-900 dark:text-zinc-200`}>{res.title}</h3>
+                      <div className="flex items-center gap-2">
+                        {(res.referenceCount ?? 0) > 0 && (
+                          <span className={`text-xs text-slate-500 dark:text-zinc-500`}>{res.referenceCount} use{res.referenceCount !== 1 ? 's' : ''}</span>
+                        )}
+                        <button
+                          onClick={() => handleIncrementReference(res.id ?? '')}
+                          className={`flex items-center gap-1 text-xs px-2 py-1 rounded transition-colors bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200 dark:bg-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-600 dark:hover:text-zinc-200`}
+                          title="Mark as used"
+                        >
+                          <BookOpen size={10} /> Used
+                        </button>
+                      </div>
                     </div>
+                    {steps.length > 0 ? (
+                      <ol className="space-y-1 mb-2">
+                        {steps.map((step, si) => (
+                          <li key={si} className={`text-xs flex gap-2 text-slate-700 dark:text-zinc-400`}>
+                            <span className={`shrink-0 text-slate-400 dark:text-zinc-600`}>{si + 1}.</span>
+                            <span>{step}</span>
+                          </li>
+                        ))}
+                      </ol>
+                    ) : (
+                      <p className={`text-xs mb-2 text-slate-500 dark:text-zinc-500`}>No steps available.</p>
+                    )}
+                    {res.notes && (
+                      <p className={`text-xs mt-2 pt-2 border-t italic text-slate-500 border-slate-200 dark:text-zinc-500 dark:border-zinc-700/50`}>{res.notes}</p>
+                    )}
+                    {res.createdAt && (
+                      <p className={`text-xs mt-2 text-slate-400 dark:text-zinc-600`}>{formatRelativeTime(res.createdAt)}</p>
+                    )}
                   </div>
-                  <ol className="space-y-1 mb-2">
-                    {res.steps.map((step, si) => (
-                      <li key={si} className={`text-xs flex gap-2 text-slate-700 dark:text-zinc-400`}>
-                        <span className={`shrink-0 text-slate-400 dark:text-zinc-600`}>{si + 1}.</span>
-                        <span>{step}</span>
-                      </li>
-                    ))}
-                  </ol>
-                  {res.notes && (
-                    <p className={`text-xs mt-2 pt-2 border-t italic text-slate-500 border-slate-200 dark:text-zinc-500 dark:border-zinc-700/50`}>{res.notes}</p>
-                  )}
-                  {res.createdAt && (
-                    <p className={`text-xs mt-2 text-slate-400 dark:text-zinc-600`}>{formatRelativeTime(res.createdAt)}</p>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <p className={`text-xs text-slate-500 dark:text-zinc-500`}>No resolutions documented yet. Add one to help future troubleshooting.</p>
@@ -706,8 +751,8 @@ export const IssueDetail: React.FC = () => {
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div className={`flex items-center justify-between px-3 py-2 rounded-lg bg-slate-50 dark:bg-zinc-800/50`}>
               <span className="text-slate-500 dark:text-zinc-500">Resolutions</span>
-              <span className={`font-medium ${ (issue.resolutions?.length ?? 0) > 0 ? 'text-emerald-400' : 'text-zinc-600'}`}>
-                {(issue.resolutions?.length ?? 0) > 0 ? `${issue.resolutions!.length} added` : 'None'}
+              <span className={`font-medium ${ issueResolutions.length > 0 ? 'text-emerald-400' : 'text-zinc-600'}`}>
+                {issueResolutions.length > 0 ? `${issueResolutions.length} added` : 'None'}
               </span>
             </div>
             <div className={`flex items-center justify-between px-3 py-2 rounded-lg bg-slate-50 dark:bg-zinc-800/50`}>
