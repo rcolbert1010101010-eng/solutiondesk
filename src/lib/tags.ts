@@ -24,6 +24,10 @@ function normalizeName(name: string): string {
   return name.trim().replace(/\s+/g, ' ');
 }
 
+export function normalizeTagName(name: string): string {
+  return normalizeName(name).toLowerCase();
+}
+
 function normalizeColor(color?: string): string | undefined {
   if (!color) return undefined;
   const value = color.trim();
@@ -198,9 +202,9 @@ export function listTags(): Tag[] {
 }
 
 export function getTagByName(name: string): Tag | undefined {
-  const key = normalizeName(name).toLowerCase();
+  const key = normalizeTagName(name);
   if (!key) return undefined;
-  return listTags().find(tag => tag.name.toLowerCase() === key);
+  return listTags().find(tag => normalizeTagName(tag.name) === key);
 }
 
 export function createTag(input: { name: string; color?: string }): Tag {
@@ -209,8 +213,9 @@ export function createTag(input: { name: string; color?: string }): Tag {
     throw new Error('Tag name is required.');
   }
 
+  const nameKey = normalizeTagName(name);
   const tags = loadTags();
-  const duplicate = tags.find(tag => tag.name.toLowerCase() === name.toLowerCase());
+  const duplicate = tags.find(tag => normalizeTagName(tag.name) === nameKey);
   if (duplicate) {
     throw new Error(`Tag "${name}" already exists.`);
   }
@@ -244,7 +249,8 @@ export function updateTag(id: string, updates: { name?: string; color?: string }
     throw new Error('Tag name is required.');
   }
 
-  const duplicate = tags.find(tag => tag.id !== id && tag.name.toLowerCase() === nextName.toLowerCase());
+  const nextNameKey = normalizeTagName(nextName);
+  const duplicate = tags.find(tag => tag.id !== id && normalizeTagName(tag.name) === nextNameKey);
   if (duplicate) {
     throw new Error(`Tag "${nextName}" already exists.`);
   }

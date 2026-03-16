@@ -22,7 +22,7 @@ import { SeverityBadge } from '../components/SeverityBadge';
 import { TagBadge } from '../components/TagBadge';
 import { ConfidenceBadge } from '../components/ConfidenceBadge';
 import { formatDate, formatRelativeTime } from '../lib/utils';
-import { listTags, TAGS_CHANGED_EVENT } from '../lib/tags';
+import { createTag, getTagByName, listTags, normalizeTagName, TAGS_CHANGED_EVENT } from '../lib/tags';
 import {
   ArrowLeft,
   Edit3,
@@ -105,6 +105,9 @@ export const IssueDetail: React.FC = () => {
   const [sourceRelationship, setSourceRelationship] = useState<IssueRelationship | undefined>();
   const [allIssues, setAllIssues] = useState<Issue[]>([]);
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
+  const [quickTagInput, setQuickTagInput] = useState('');
+  const [quickTagMessage, setQuickTagMessage] = useState('');
+  const [quickTagMessageTone, setQuickTagMessageTone] = useState<'info' | 'success' | 'error'>('info');
   const [linkSearch, setLinkSearch] = useState('');
   const [selectedLinkTarget, setSelectedLinkTarget] = useState<string>('');
   const [selectedRelType, setSelectedRelType] = useState<RelationshipType>('duplicate');
@@ -155,13 +158,24 @@ export const IssueDetail: React.FC = () => {
 
   useEffect(() => {
     const refreshTags = () => {
-      setAvailableTags(listTags());
-      loadIssue();
-      setAllIssues(getAllIssues());
+      const tags = listTags();
+      const availableNames = new Set(tags.map(tag => tag.name));
+      setAvailableTags(tags);
+      setEditForm(prev => ({
+        ...prev,
+        tags: prev.tags.filter(tag => availableNames.has(tag))
+      }));
+      setIssue(prev => {
+        if (!prev || !Array.isArray(prev.tags)) return prev;
+        return {
+          ...prev,
+          tags: prev.tags.filter(tag => availableNames.has(tag))
+        };
+      });
     };
     window.addEventListener(TAGS_CHANGED_EVENT, refreshTags);
     return () => window.removeEventListener(TAGS_CHANGED_EVENT, refreshTags);
-  }, [id]);
+  }, []);
 
   if (!issue) {
     return (
@@ -265,6 +279,49 @@ export const IssueDetail: React.FC = () => {
         ? prev.tags.filter(t => t !== tag)
         : [...prev.tags, tag]
     }));
+  };
+
+  const selectTag = (tagName: string) => {
+    setEditForm(prev => ({
+      ...prev,
+      tags: prev.tags.includes(tagName) ? prev.tags : [...prev.tags, tagName]
+    }));
+  };
+
+  const quickTagNormalized = normalizeTagName(quickTagInput);
+  const duplicateQuickTag = quickTagNormalized
+    ? availableTags.find(tag => normalizeTagName(tag.name) === quickTagNormalized)
+    : undefined;
+
+  const handleQuickAddTag = () => {
+    if (!quickTagNormalized) return;
+
+    if (duplicateQuickTag) {
+      selectTag(duplicateQuickTag.name);
+      setQuickTagMessage('Tag already exists — selected it.');
+      setQuickTagMessageTone('info');
+      return;
+    }
+
+    try {
+      const created = createTag({ name: quickTagInput });
+      setAvailableTags(listTags());
+      selectTag(created.name);
+      setQuickTagInput('');
+      setQuickTagMessage('Tag added and selected.');
+      setQuickTagMessageTone('success');
+    } catch (err) {
+      const existing = getTagByName(quickTagInput);
+      if (existing) {
+        selectTag(existing.name);
+        setQuickTagMessage('Tag already exists — selected it.');
+        setQuickTagMessageTone('info');
+        setAvailableTags(listTags());
+        return;
+      }
+      setQuickTagMessage(err instanceof Error ? err.message : 'Unable to add tag.');
+      setQuickTagMessageTone('error');
+    }
   };
 
   const isResolved = issue.status === 'Resolved' || issue.status === 'Closed';
@@ -456,6 +513,48 @@ export const IssueDetail: React.FC = () => {
             {editing ? (
               <div>
                 <p className={`text-xs mb-2 text-slate-500 dark:text-zinc-500`}>Tags</p>
+                <div className="flex items-center gap-2 mb-2">
+                  <input
+                    type="text"
+                    value={quickTagInput}
+                    onChange={e => {
+                      setQuickTagInput(e.target.value);
+                      setQuickTagMessage('');
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleQuickAddTag();
+                      }
+                    }}
+                    placeholder="New tag name..."
+                    className="flex-1 border rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 bg-white border-slate-200 text-slate-900 placeholder-slate-400 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-100 dark:placeholder-zinc-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleQuickAddTag}
+                    disabled={!quickTagNormalized}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-400 text-zinc-900 hover:bg-amber-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Add
+                  </button>
+                </div>
+                {quickTagMessage && (
+                  <p className={`text-xs mb-2 ${
+                    quickTagMessageTone === 'error'
+                      ? 'text-red-500'
+                      : quickTagMessageTone === 'success'
+                        ? 'text-emerald-500'
+                        : 'text-amber-500'
+                  }`}>
+                    {quickTagMessage}
+                  </p>
+                )}
+                {!quickTagMessage && duplicateQuickTag && (
+                  <p className="text-xs mb-2 text-amber-500">
+                    Tag already exists. Click Add to select it.
+                  </p>
+                )}
                 <div className="flex flex-wrap gap-1.5">
                   {availableTags.map(tag => (
                     <TagBadge
