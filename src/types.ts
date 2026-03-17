@@ -19,6 +19,7 @@ export interface Resolution {
   summary?: string;
   rootCause?: string;
   steps?: string[] | string;
+  stepsHtml?: string;
   stepsTaken?: string;
   finalResolution?: string;
   preventionNotes?: string;

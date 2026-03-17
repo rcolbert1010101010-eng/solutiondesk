@@ -55,6 +55,93 @@ const RELATIONSHIP_LABELS: Record<RelationshipType, string> = {
   confirmed_same_root_cause: 'Same Root Cause'
 };
 
+const DATA_IMAGE_SRC_REGEX = /^data:image\/[a-z0-9.+-]+;base64,[a-z0-9+/=\s]+$/i;
+const STEP_BLOCK_TAGS = new Set([
+  'address', 'article', 'aside', 'blockquote', 'div', 'dl', 'fieldset', 'figcaption', 'figure',
+  'footer', 'form', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'header', 'hr', 'li', 'main', 'nav',
+  'ol', 'p', 'pre', 'section', 'table', 'tbody', 'td', 'tfoot', 'th', 'thead', 'tr', 'ul'
+]);
+
+function isSafeDataImageSrc(src: string): boolean {
+  return DATA_IMAGE_SRC_REGEX.test(src.trim());
+}
+
+function toImageToken(src: string): string {
+  return `[img:${src}]`;
+}
+
+function parseImageToken(line: string): string | null {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith('[img:') || !trimmed.endsWith(']')) return null;
+  const src = trimmed.slice(5, -1).trim();
+  return isSafeDataImageSrc(src) ? src : null;
+}
+
+function stepsHtmlToLines(html: string): string[] {
+  const source = (html ?? '').trim();
+  if (!source) return [];
+
+  if (typeof window === 'undefined' || typeof window.DOMParser === 'undefined') {
+    return source
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/(p|div|li|h[1-6]|blockquote|pre|tr|td|th)>/gi, '\n')
+      .replace(/<img[^>]*src=["']([^"']+)["'][^>]*>/gi, (_m, src) => (
+        isSafeDataImageSrc(String(src)) ? `\n${toImageToken(String(src))}\n` : '\n'
+      ))
+      .replace(/<[^>]+>/g, '')
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(Boolean);
+  }
+
+  const doc = new window.DOMParser().parseFromString(source, 'text/html');
+  const lines: string[] = [];
+  let currentLine = '';
+
+  const flushLine = () => {
+    const normalized = currentLine
+      .replace(/\u00a0/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (normalized) lines.push(normalized);
+    currentLine = '';
+  };
+
+  const walk = (node: Node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      currentLine += node.textContent ?? '';
+      return;
+    }
+
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const element = node as HTMLElement;
+    const tag = element.tagName.toLowerCase();
+
+    if (tag === 'img') {
+      const src = element.getAttribute('src') ?? '';
+      if (isSafeDataImageSrc(src)) {
+        flushLine();
+        lines.push(toImageToken(src.trim()));
+      }
+      return;
+    }
+
+    if (tag === 'br') {
+      flushLine();
+      return;
+    }
+
+    const isBlock = STEP_BLOCK_TAGS.has(tag);
+    if (isBlock) flushLine();
+    Array.from(element.childNodes).forEach(walk);
+    if (isBlock) flushLine();
+  };
+
+  Array.from(doc.body.childNodes).forEach(walk);
+  flushLine();
+  return lines;
+}
+
 function toStepText(value: unknown): string {
   if (value === null || value === undefined) return '';
   if (typeof value === 'string') return value.trim();
@@ -69,7 +156,8 @@ function toStepText(value: unknown): string {
 function normalizeSteps(steps: unknown): string[] {
   if (Array.isArray(steps)) {
     return steps
-      .map(step => toStepText(step))
+      .flatMap(step => toStepText(step).split(/\r?\n/))
+      .map(step => step.trim())
       .filter(step => step.length > 0);
   }
 
@@ -85,11 +173,27 @@ function normalizeSteps(steps: unknown): string[] {
 
   if (steps && typeof steps === 'object') {
     return Object.values(steps as Record<string, unknown>)
-      .map(value => toStepText(value))
+      .flatMap(value => toStepText(value).split(/\r?\n/))
+      .map(step => step.trim())
       .filter(step => step.length > 0);
   }
 
   return [];
+}
+
+function renderStepValue(step: string, index: number): React.ReactNode {
+  const imageSrc = parseImageToken(step);
+  if (imageSrc) {
+    return (
+      <img
+        src={imageSrc}
+        alt={`Step image ${index + 1}`}
+        className="max-w-full h-auto rounded-md border border-slate-200 dark:border-zinc-700"
+      />
+    );
+  }
+
+  return <span>{step}</span>;
 }
 
 export const IssueDetail: React.FC = () => {
@@ -126,7 +230,7 @@ export const IssueDetail: React.FC = () => {
 
   const [resolutionForm, setResolutionForm] = useState({
     title: '',
-    steps: '',
+    stepsHtml: '<p></p>',
     notesHtml: '<p></p>',
     notesText: ''
   });
@@ -214,17 +318,19 @@ export const IssueDetail: React.FC = () => {
   };
 
   const handleAddResolution = () => {
-    if (!id || !resolutionForm.title.trim() || !resolutionForm.steps.trim()) return;
-    const steps = resolutionForm.steps.split('\n').filter(s => s.trim());
+    const steps = stepsHtmlToLines(resolutionForm.stepsHtml);
+    if (!id || !resolutionForm.title.trim() || steps.length === 0) return;
     const notesText = resolutionForm.notesText.trim();
     const notesHtml = resolutionForm.notesHtml.trim();
+    const stepsHtml = resolutionForm.stepsHtml.trim();
     addResolution(id, {
       title: resolutionForm.title.trim(),
+      stepsHtml,
       steps,
       notes: notesText ? notesHtml : undefined,
       notesText: notesText || undefined
     });
-    setResolutionForm({ title: '', steps: '', notesHtml: '<p></p>', notesText: '' });
+    setResolutionForm({ title: '', stepsHtml: '<p></p>', notesHtml: '<p></p>', notesText: '' });
     setShowResolutionForm(false);
     loadIssue();
   };
@@ -335,6 +441,7 @@ export const IssueDetail: React.FC = () => {
   const isResolved = issue.status === 'Resolved' || issue.status === 'Closed';
   const confidenceScore = calculateConfidenceScore(issue);
   const issueResolutions = Array.isArray(issue.resolutions) ? issue.resolutions : [];
+  const resolutionDraftSteps = stepsHtmlToLines(resolutionForm.stepsHtml);
 
   const linkableMasters = allIssues.filter(i =>
     i.id !== issue.id &&
@@ -757,11 +864,10 @@ export const IssueDetail: React.FC = () => {
                 </div>
                 <div>
                   <label className={`text-xs mb-1 block text-slate-500 dark:text-zinc-500`}>Steps * (one per line)</label>
-                  <textarea
-                    className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-500 min-h-[80px] resize-y bg-white border-slate-200 text-slate-900 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-200`}
-                    placeholder="Step 1&#10;Step 2&#10;Step 3"
-                    value={resolutionForm.steps}
-                    onChange={e => setResolutionForm(p => ({ ...p, steps: e.target.value }))}
+                  <RichTextEditor
+                    valueHtml={resolutionForm.stepsHtml}
+                    onChangeHtml={html => setResolutionForm(p => ({ ...p, stepsHtml: html }))}
+                    placeholder="Step 1, Step 2, Step 3 (one per line). You can also paste images."
                   />
                 </div>
                 <div>
@@ -776,13 +882,13 @@ export const IssueDetail: React.FC = () => {
                 <div className="flex gap-2">
                   <button
                     onClick={handleAddResolution}
-                    disabled={!resolutionForm.title.trim() || !resolutionForm.steps.trim()}
+                    disabled={!resolutionForm.title.trim() || resolutionDraftSteps.length === 0}
                     className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-amber-500 text-zinc-900 text-xs font-semibold hover:bg-amber-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <Save size={12} /> Save Resolution
                   </button>
                   <button
-                    onClick={() => { setShowResolutionForm(false); setResolutionForm({ title: '', steps: '', notesHtml: '<p></p>', notesText: '' }); }}
+                    onClick={() => { setShowResolutionForm(false); setResolutionForm({ title: '', stepsHtml: '<p></p>', notesHtml: '<p></p>', notesText: '' }); }}
                     className={`px-4 py-2 rounded-lg text-xs transition-colors bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 dark:bg-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-600`}
                   >
                     Cancel
@@ -796,6 +902,7 @@ export const IssueDetail: React.FC = () => {
             <div className="space-y-3">
               {issueResolutions.map((res, idx) => {
                 const steps = normalizeSteps(res.steps);
+                const hasStepsHtml = typeof res.stepsHtml === 'string' && res.stepsHtml.trim().length > 0;
                 return (
                   <div key={res.id ?? idx} className={`p-4 rounded-lg border bg-slate-50 border-slate-200 dark:bg-zinc-800/40 dark:border-zinc-700/50`}>
                     <div className="flex items-start justify-between mb-2">
@@ -813,12 +920,17 @@ export const IssueDetail: React.FC = () => {
                         </button>
                       </div>
                     </div>
-                    {steps.length > 0 ? (
+                    {hasStepsHtml ? (
+                      <SanitizedHtmlContent
+                        html={res.stepsHtml}
+                        className="prose prose-sm max-w-none mb-2 text-slate-700 dark:text-zinc-300 dark:prose-invert prose-li:my-0 prose-img:rounded-md prose-img:border prose-img:border-slate-200 dark:prose-img:border-zinc-700"
+                      />
+                    ) : steps.length > 0 ? (
                       <ol className="space-y-1 mb-2">
                         {steps.map((step, si) => (
                           <li key={si} className={`text-xs flex gap-2 text-slate-700 dark:text-zinc-400`}>
                             <span className={`shrink-0 text-slate-400 dark:text-zinc-600`}>{si + 1}.</span>
-                            <span>{step}</span>
+                            {renderStepValue(step, si)}
                           </li>
                         ))}
                       </ol>
