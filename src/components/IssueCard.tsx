@@ -8,6 +8,7 @@ import { ConfidenceBadge } from './ConfidenceBadge';
 import { formatRelativeTime } from '../lib/utils';
 import { Monitor, Clock, User, CheckCircle2, Star, Link } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
+import { getIssueDescriptionText } from '../lib/richText';
 
 interface IssueCardProps {
   issue: Issue;
@@ -18,6 +19,7 @@ export const IssueCard: React.FC<IssueCardProps> = ({ issue }) => {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const isResolved = issue.status === 'Resolved' || issue.status === 'Closed';
+  const descriptionText = getIssueDescriptionText(issue);
 
   return (
     <div
@@ -54,7 +56,7 @@ export const IssueCard: React.FC<IssueCardProps> = ({ issue }) => {
       </div>
       <p className={`text-xs mb-3 line-clamp-2 ${
         isDark ? 'text-zinc-500' : 'text-slate-500'
-      }`}>{issue.description}</p>
+      }`}>{descriptionText}</p>
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         {issue.tags && issue.tags.map(tag => (
           <TagBadge key={tag} tag={tag} size="sm" />

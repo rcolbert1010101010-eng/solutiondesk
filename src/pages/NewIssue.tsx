@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { addIssue, getAllIssues } from '../lib/db';
 import { Severity, TagReference, Issue, Tag } from '../types';
 import { TagBadge } from '../components/TagBadge';
+import { RichTextEditor } from '../components/RichTextEditor';
 import { SeverityBadge } from '../components/SeverityBadge';
 import { SemanticMatchCard } from '../components/SemanticMatchCard';
 import { semanticSearch, SemanticMatch } from '../lib/semanticSearch';
@@ -25,7 +26,8 @@ const SEVERITY_OPTIONS: Severity[] = ['Low', 'Medium', 'High', 'Critical'];
 export const NewIssue: React.FC = () => {
   const navigate = useNavigate();
   const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
+  const [descriptionHtml, setDescriptionHtml] = useState('<p></p>');
+  const [descriptionText, setDescriptionText] = useState('');
   const [systemAffected, setSystemAffected] = useState('');
   const [severity, setSeverity] = useState<Severity>('Medium');
   const [selectedTags, setSelectedTags] = useState<TagReference[]>([]);
@@ -64,7 +66,7 @@ export const NewIssue: React.FC = () => {
     : undefined;
 
   // Build search query from title + description + system
-  const searchQuery = [title, description, systemAffected].filter(Boolean).join(' ');
+  const searchQuery = [title, descriptionText, systemAffected].filter(Boolean).join(' ');
 
   useEffect(() => {
     if (searchQuery.trim().length < 10) {
@@ -132,7 +134,7 @@ export const NewIssue: React.FC = () => {
   const validate = () => {
     const newErrors: Record<string, string> = {};
     if (!title.trim()) newErrors.title = 'Title is required';
-    if (!description.trim()) newErrors.description = 'Description is required';
+    if (!descriptionText.trim()) newErrors.description = 'Description is required';
     if (!systemAffected.trim()) newErrors.systemAffected = 'Affected system is required';
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -145,7 +147,9 @@ export const NewIssue: React.FC = () => {
     setTimeout(() => {
       const newIssue = addIssue({
         title: title.trim(),
-        description: description.trim(),
+        description: descriptionText.trim(),
+        descriptionText: descriptionText.trim(),
+        descriptionHtml,
         systemAffected: systemAffected.trim(),
         severity,
         status: 'Open',
@@ -206,16 +210,11 @@ export const NewIssue: React.FC = () => {
               <label className={`block text-xs font-medium mb-1.5 text-slate-700 dark:text-zinc-400`}>
                 Description <span className="text-red-400">*</span>
               </label>
-              <textarea
-                value={description}
-                onChange={e => setDescription(e.target.value)}
+              <RichTextEditor
+                valueHtml={descriptionHtml}
+                onChangeHtml={setDescriptionHtml}
+                onChangeText={setDescriptionText}
                 placeholder="Detailed description of the issue, symptoms, and impact..."
-                rows={5}
-                className={`w-full border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-1 transition-colors resize-none bg-white text-slate-900 placeholder-slate-400 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder-zinc-500 ${
-                  errors.description
-                    ? 'border-red-500/50 focus:border-red-500/50 focus:ring-red-500/20'
-                    : `border-slate-200 dark:border-zinc-700 focus:border-amber-500/50 focus:ring-amber-500/20`
-                }`}
               />
               {errors.description && <p className="text-xs text-red-400 mt-1">{errors.description}</p>}
             </div>

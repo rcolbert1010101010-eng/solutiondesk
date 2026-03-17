@@ -12,7 +12,6 @@ import {
   getRelationshipsForMaster,
   getRelationshipForSource,
   getAllIssues,
-  getConfidenceLevel,
   calculateConfidenceScore,
   incrementReferenceCount
 } from '../lib/db';
@@ -21,8 +20,10 @@ import { StatusBadge } from '../components/StatusBadge';
 import { SeverityBadge } from '../components/SeverityBadge';
 import { TagBadge } from '../components/TagBadge';
 import { ConfidenceBadge } from '../components/ConfidenceBadge';
+import { RichTextEditor, SanitizedHtmlContent } from '../components/RichTextEditor';
 import { formatDate, formatRelativeTime } from '../lib/utils';
 import { createTag, getTagByName, listTags, normalizeTagName, TAGS_CHANGED_EVENT } from '../lib/tags';
+import { getIssueDescriptionHtml, getIssueDescriptionText, plainTextToHtml } from '../lib/richText';
 import {
   ArrowLeft,
   Edit3,
@@ -44,7 +45,6 @@ import {
   ChevronRight,
   Shield,
   BookOpen,
-  Copy,
   Check
 } from 'lucide-react';
 
@@ -115,7 +115,8 @@ export const IssueDetail: React.FC = () => {
 
   const [editForm, setEditForm] = useState({
     title: '',
-    description: '',
+    descriptionHtml: '<p></p>',
+    descriptionText: '',
     systemAffected: '',
     severity: 'Medium' as Severity,
     status: 'Open' as Status,
@@ -126,7 +127,8 @@ export const IssueDetail: React.FC = () => {
   const [resolutionForm, setResolutionForm] = useState({
     title: '',
     steps: '',
-    notes: ''
+    notesHtml: '<p></p>',
+    notesText: ''
   });
 
   const loadIssue = () => {
@@ -136,7 +138,8 @@ export const IssueDetail: React.FC = () => {
     setIssue(found);
     setEditForm({
       title: found.title,
-      description: found.description,
+      descriptionHtml: getIssueDescriptionHtml(found),
+      descriptionText: getIssueDescriptionText(found),
       systemAffected: found.systemAffected,
       severity: found.severity,
       status: found.status,
@@ -189,7 +192,9 @@ export const IssueDetail: React.FC = () => {
     if (!id) return;
     updateIssue(id, {
       title: editForm.title,
-      description: editForm.description,
+      description: editForm.descriptionText,
+      descriptionText: editForm.descriptionText,
+      descriptionHtml: editForm.descriptionHtml,
       systemAffected: editForm.systemAffected,
       severity: editForm.severity,
       status: editForm.status,
@@ -211,12 +216,15 @@ export const IssueDetail: React.FC = () => {
   const handleAddResolution = () => {
     if (!id || !resolutionForm.title.trim() || !resolutionForm.steps.trim()) return;
     const steps = resolutionForm.steps.split('\n').filter(s => s.trim());
+    const notesText = resolutionForm.notesText.trim();
+    const notesHtml = resolutionForm.notesHtml.trim();
     addResolution(id, {
       title: resolutionForm.title.trim(),
       steps,
-      notes: resolutionForm.notes.trim() || undefined
+      notes: notesText ? notesHtml : undefined,
+      notesText: notesText || undefined
     });
-    setResolutionForm({ title: '', steps: '', notes: '' });
+    setResolutionForm({ title: '', steps: '', notesHtml: '<p></p>', notesText: '' });
     setShowResolutionForm(false);
     loadIssue();
   };
@@ -298,7 +306,7 @@ export const IssueDetail: React.FC = () => {
 
     if (duplicateQuickTag) {
       selectTag(duplicateQuickTag.name);
-      setQuickTagMessage('Tag already exists — selected it.');
+      setQuickTagMessage('Tag already exists - selected it.');
       setQuickTagMessageTone('info');
       return;
     }
@@ -314,7 +322,7 @@ export const IssueDetail: React.FC = () => {
       const existing = getTagByName(quickTagInput);
       if (existing) {
         selectTag(existing.name);
-        setQuickTagMessage('Tag already exists — selected it.');
+        setQuickTagMessage('Tag already exists - selected it.');
         setQuickTagMessageTone('info');
         setAvailableTags(listTags());
         return;
@@ -325,7 +333,6 @@ export const IssueDetail: React.FC = () => {
   };
 
   const isResolved = issue.status === 'Resolved' || issue.status === 'Closed';
-  const confidence = getConfidenceLevel(issue);
   const confidenceScore = calculateConfidenceScore(issue);
   const issueResolutions = Array.isArray(issue.resolutions) ? issue.resolutions : [];
 
@@ -581,13 +588,17 @@ export const IssueDetail: React.FC = () => {
               <FileText size={11} /> Description
             </p>
             {editing ? (
-              <textarea
-                className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-500 min-h-[100px] resize-y bg-slate-50 border-slate-200 text-slate-700 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300`}
-                value={editForm.description}
-                onChange={e => setEditForm(p => ({ ...p, description: e.target.value }))}
+              <RichTextEditor
+                valueHtml={editForm.descriptionHtml}
+                onChangeHtml={html => setEditForm(p => ({ ...p, descriptionHtml: html }))}
+                onChangeText={text => setEditForm(p => ({ ...p, descriptionText: text }))}
+                placeholder="Describe symptoms, impact, and context..."
               />
             ) : (
-              <p className={`text-sm leading-relaxed whitespace-pre-wrap text-slate-700 dark:text-zinc-300`}>{issue.description}</p>
+              <SanitizedHtmlContent
+                html={issue.descriptionHtml ?? plainTextToHtml(getIssueDescriptionText(issue))}
+                className="prose prose-sm max-w-none text-slate-700 dark:text-zinc-300 dark:prose-invert prose-img:rounded-md prose-img:border prose-img:border-slate-200 dark:prose-img:border-zinc-700"
+              />
             )}
           </div>
 
@@ -755,11 +766,11 @@ export const IssueDetail: React.FC = () => {
                 </div>
                 <div>
                   <label className={`text-xs mb-1 block text-slate-500 dark:text-zinc-500`}>Notes (optional)</label>
-                  <textarea
-                    className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-500 min-h-[60px] resize-y bg-white border-slate-200 text-slate-900 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-200`}
+                  <RichTextEditor
+                    valueHtml={resolutionForm.notesHtml}
+                    onChangeHtml={html => setResolutionForm(p => ({ ...p, notesHtml: html }))}
+                    onChangeText={text => setResolutionForm(p => ({ ...p, notesText: text }))}
                     placeholder="Additional notes..."
-                    value={resolutionForm.notes}
-                    onChange={e => setResolutionForm(p => ({ ...p, notes: e.target.value }))}
                   />
                 </div>
                 <div className="flex gap-2">
@@ -771,7 +782,7 @@ export const IssueDetail: React.FC = () => {
                     <Save size={12} /> Save Resolution
                   </button>
                   <button
-                    onClick={() => { setShowResolutionForm(false); setResolutionForm({ title: '', steps: '', notes: '' }); }}
+                    onClick={() => { setShowResolutionForm(false); setResolutionForm({ title: '', steps: '', notesHtml: '<p></p>', notesText: '' }); }}
                     className={`px-4 py-2 rounded-lg text-xs transition-colors bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 dark:bg-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-600`}
                   >
                     Cancel
@@ -814,8 +825,13 @@ export const IssueDetail: React.FC = () => {
                     ) : (
                       <p className={`text-xs mb-2 text-slate-500 dark:text-zinc-500`}>No steps available.</p>
                     )}
-                    {res.notes && (
-                      <p className={`text-xs mt-2 pt-2 border-t italic text-slate-500 border-slate-200 dark:text-zinc-500 dark:border-zinc-700/50`}>{res.notes}</p>
+                    {(res.notes || res.notesText) && (
+                      <div className="mt-2 pt-2 border-t border-slate-200 dark:border-zinc-700/50">
+                        <SanitizedHtmlContent
+                          html={res.notes ?? plainTextToHtml(res.notesText ?? '')}
+                          className="prose prose-sm max-w-none text-xs italic text-slate-600 dark:text-zinc-400 dark:prose-invert prose-img:rounded-md prose-img:border prose-img:border-slate-200 dark:prose-img:border-zinc-700"
+                        />
+                      </div>
                     )}
                     {res.createdAt && (
                       <p className={`text-xs mt-2 text-slate-400 dark:text-zinc-600`}>{formatRelativeTime(res.createdAt)}</p>
@@ -955,3 +971,4 @@ export const IssueDetail: React.FC = () => {
     </div>
   );
 };
+

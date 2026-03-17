@@ -9,6 +9,7 @@ import { SemanticSearchPanel } from '../components/SemanticSearchPanel';
 import { semanticSearch, SemanticMatch } from '../lib/semanticSearch';
 import { SemanticMatchCard } from '../components/SemanticMatchCard';
 import { listTags, TAGS_CHANGED_EVENT } from '../lib/tags';
+import { getIssueDescriptionText } from '../lib/richText';
 import { Search, PlusCircle, SlidersHorizontal, LayoutGrid, List, X, Tag as TagIcon, Zap, ChevronDown } from 'lucide-react';
 
 type ViewMode = 'table' | 'grid';
@@ -72,10 +73,11 @@ export const Issues: React.FC = () => {
     }
 
     return issues.filter(issue => {
+      const descriptionText = getIssueDescriptionText(issue).toLowerCase();
       const matchesSearch =
         search === '' ||
         issue.title.toLowerCase().includes(search.toLowerCase()) ||
-        issue.description.toLowerCase().includes(search.toLowerCase()) ||
+        descriptionText.includes(search.toLowerCase()) ||
         issue.systemAffected.toLowerCase().includes(search.toLowerCase()) ||
         issue.id.toLowerCase().includes(search.toLowerCase()) ||
         (issue.tags && issue.tags.some(t => t.toLowerCase().includes(search.toLowerCase())));

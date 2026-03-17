@@ -7,6 +7,7 @@ import { SeverityBadge } from './SeverityBadge';
 import { formatRelativeTime } from '../lib/utils';
 import { ChevronDown, ChevronUp, Star, ExternalLink, Zap } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
+import { getIssueDescriptionText } from '../lib/richText';
 
 interface SemanticMatchCardProps {
   match: SemanticMatch;
@@ -21,6 +22,7 @@ export const SemanticMatchCard: React.FC<SemanticMatchCardProps> = ({ match, ran
   const navigate = useNavigate();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
+  const descriptionText = getIssueDescriptionText(issue);
 
   const scorePercent = Math.min(Math.round(score * 100), 99);
   const scoreColor =
@@ -77,7 +79,7 @@ export const SemanticMatchCard: React.FC<SemanticMatchCardProps> = ({ match, ran
           {!compact && (
             <p className={`text-xs mt-1 line-clamp-2 ${
               isDark ? 'text-zinc-500' : 'text-slate-500'
-            }`}>{issue.description}</p>
+            }`}>{descriptionText}</p>
           )}
 
           <div className={`flex items-center gap-3 mt-2 flex-wrap text-xs ${

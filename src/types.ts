@@ -23,6 +23,7 @@ export interface Resolution {
   finalResolution?: string;
   preventionNotes?: string;
   notes?: string;
+  notesText?: string;
   createdAt?: string;
   resolvedAt?: string;
   resolvedBy?: string;
@@ -49,7 +50,9 @@ export interface IssueRelationship {
 export interface Issue {
   id: string;
   title: string;
-  description: string;
+  description?: string;
+  descriptionText?: string;
+  descriptionHtml?: string;
   systemAffected: string;
   severity: Severity;
   status: Status;

@@ -8,6 +8,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import { TagBadge } from '../components/TagBadge';
 import { SemanticSearchPanel } from '../components/SemanticSearchPanel';
 import { formatRelativeTime } from '../lib/utils';
+import { getIssueDescriptionText } from '../lib/richText';
 import {
   BookOpen,
   Search,
@@ -41,9 +42,10 @@ export const ResolutionLibrary: React.FC = () => {
     if (filterMaster && !issue.isMasterIncident) return false;
     if (!search) return true;
     const q = search.toLowerCase();
+    const descriptionText = getIssueDescriptionText(issue).toLowerCase();
     return (
       issue.title.toLowerCase().includes(q) ||
-      issue.description.toLowerCase().includes(q) ||
+      descriptionText.includes(q) ||
       issue.systemAffected.toLowerCase().includes(q) ||
       (issue.resolution?.summary ?? '').toLowerCase().includes(q) ||
       (issue.resolution?.rootCause ?? '').toLowerCase().includes(q)
@@ -197,7 +199,7 @@ export const ResolutionLibrary: React.FC = () => {
                         <ConfidenceBadge issue={issue} size="sm" showScore />
                       </div>
                       <h3 className={`text-sm font-semibold text-slate-900 dark:text-zinc-100`}>{issue.title}</h3>
-                      <p className={`text-xs mt-1 line-clamp-2 text-slate-500 dark:text-zinc-500`}>{issue.description}</p>
+                      <p className={`text-xs mt-1 line-clamp-2 text-slate-500 dark:text-zinc-500`}>{getIssueDescriptionText(issue)}</p>
                     </div>
                     <SeverityBadge severity={issue.severity} size="sm" />
                   </div>

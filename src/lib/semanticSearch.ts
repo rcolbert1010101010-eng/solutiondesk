@@ -1,4 +1,5 @@
 import { Issue } from '../types';
+import { getIssueDescriptionText } from './richText';
 
 export interface SemanticMatch {
   issue: Issue;
@@ -90,7 +91,7 @@ function semanticGroupSimilarity(groupsA: Set<number>, groupsB: Set<number>): nu
 function getIssueText(issue: Issue): string {
   const parts = [
     issue.title,
-    issue.description,
+    getIssueDescriptionText(issue),
     issue.systemAffected,
     issue.resolution?.rootCause ?? '',
     issue.resolution?.summary ?? '',
@@ -179,7 +180,7 @@ export function semanticSearch(
     }
 
     // 6. Description similarity
-    const descTokens = tokenize(issue.description);
+    const descTokens = tokenize(getIssueDescriptionText(issue));
     const descScore = cosineSimilarity(queryTokens, descTokens);
     if (descScore > 0.12) {
       score += descScore * 0.2;

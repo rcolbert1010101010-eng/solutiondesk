@@ -1,5 +1,6 @@
 import { Issue, Status, Severity, Resolution, TagReference, IssueRelationship, RelationshipType } from '../types';
 import { listTags } from './tags';
+import { getIssueDescriptionText, htmlToPlainText, plainTextToHtml } from './richText';
 
 const STORAGE_KEY = 'resolution_desk_issues';
 const RELATIONSHIPS_KEY = 'resolution_desk_relationships';
@@ -167,6 +168,48 @@ function canonicalizeIssueTags(tags?: TagReference[]): TagReference[] {
   return Array.from(new Set(resolved));
 }
 
+function normalizeResolutionContent(resolution: Resolution): Resolution {
+  const normalized = { ...resolution };
+  if (normalized.notes && !normalized.notesText) {
+    normalized.notesText = htmlToPlainText(normalized.notes);
+  } else if (!normalized.notes && normalized.notesText) {
+    normalized.notes = plainTextToHtml(normalized.notesText);
+  }
+  return normalized;
+}
+
+function normalizeIssueDescriptions(issues: Issue[]): { issues: Issue[]; changed: boolean } {
+  let changed = false;
+  const normalized = issues.map(issue => {
+    const currentText = getIssueDescriptionText(issue);
+    const nextText = currentText.trim();
+    const nextHtml = issue.descriptionHtml?.trim()
+      ? issue.descriptionHtml
+      : plainTextToHtml(currentText);
+    const nextResolutions = Array.isArray(issue.resolutions)
+      ? issue.resolutions.map(normalizeResolutionContent)
+      : issue.resolutions;
+
+    const hasChanged =
+      issue.description !== nextText ||
+      issue.descriptionText !== nextText ||
+      issue.descriptionHtml !== nextHtml ||
+      nextResolutions !== issue.resolutions;
+
+    if (!hasChanged) return issue;
+    changed = true;
+
+    return {
+      ...issue,
+      description: nextText,
+      descriptionText: nextText,
+      descriptionHtml: nextHtml,
+      resolutions: nextResolutions,
+    };
+  });
+  return { issues: normalized, changed };
+}
+
 function normalizeIssuesForTagCatalog(issues: Issue[]): { issues: Issue[]; changed: boolean } {
   let changed = false;
   const normalized = issues.map(issue => {
@@ -186,16 +229,18 @@ function loadIssues(): Issue[] {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored) as Issue[];
-      const { issues, changed } = normalizeIssuesForTagCatalog(parsed);
-      if (changed) saveIssues(issues);
-      return issues;
+      const normalizedDescriptions = normalizeIssueDescriptions(parsed);
+      const normalizedTags = normalizeIssuesForTagCatalog(normalizedDescriptions.issues);
+      if (normalizedDescriptions.changed || normalizedTags.changed) saveIssues(normalizedTags.issues);
+      return normalizedTags.issues;
     }
   } catch (e) {
     // ignore
   }
-  const { issues } = normalizeIssuesForTagCatalog(defaultIssues);
-  saveIssues(issues);
-  return issues;
+  const normalizedDescriptions = normalizeIssueDescriptions(defaultIssues);
+  const normalizedTags = normalizeIssuesForTagCatalog(normalizedDescriptions.issues);
+  saveIssues(normalizedTags.issues);
+  return normalizedTags.issues;
 }
 
 function saveIssues(issues: Issue[]): void {
@@ -237,8 +282,16 @@ export function addIssue(newIssue: Omit<Issue, 'id' | 'createdAt'>): Issue {
     return max;
   }, 0);
   const newId = `ISS-${String(maxNum + 1).padStart(3, '0')}`;
+  const rawText = (newIssue.descriptionText ?? newIssue.description ?? '').trim();
+  const descriptionText = rawText || htmlToPlainText(newIssue.descriptionHtml ?? '');
+  const descriptionHtml = newIssue.descriptionHtml?.trim()
+    ? newIssue.descriptionHtml
+    : plainTextToHtml(descriptionText);
   const issue: Issue = {
     ...newIssue,
+    description: descriptionText,
+    descriptionText,
+    descriptionHtml,
     tags: canonicalizeIssueTags(newIssue.tags),
     id: newId,
     createdAt: new Date().toISOString()
@@ -255,6 +308,18 @@ export function updateIssue(id: string, updates: Partial<Issue>): Issue | undefi
   const normalizedUpdates = { ...updates };
   if (updates.tags) {
     normalizedUpdates.tags = canonicalizeIssueTags(updates.tags);
+  }
+  if (updates.descriptionHtml !== undefined || updates.descriptionText !== undefined || updates.description !== undefined) {
+    const nextText = (
+      updates.descriptionText
+      ?? updates.description
+      ?? htmlToPlainText(updates.descriptionHtml ?? issues[idx].descriptionHtml ?? '')
+    ).trim();
+    normalizedUpdates.description = nextText;
+    normalizedUpdates.descriptionText = nextText;
+    normalizedUpdates.descriptionHtml = updates.descriptionHtml?.trim()
+      ? updates.descriptionHtml
+      : plainTextToHtml(nextText);
   }
   issues[idx] = { ...issues[idx], ...normalizedUpdates };
   saveIssues(issues);
@@ -277,8 +342,11 @@ export function addResolution(issueId: string, resolution: Omit<Resolution, 'id'
   const issues = loadIssues();
   const idx = issues.findIndex(i => i.id === issueId);
   if (idx === -1) return undefined;
-  const newResolution: Resolution = {
+  const normalizedResolution = normalizeResolutionContent({
     ...resolution,
+  });
+  const newResolution: Resolution = {
+    ...normalizedResolution,
     id: `RES-${Date.now()}`
   };
   if (!issues[idx].resolutions) {
@@ -289,11 +357,18 @@ export function addResolution(issueId: string, resolution: Omit<Resolution, 'id'
   return issues[idx];
 }
 
-export function incrementReferenceCount(issueId: string): Issue | undefined {
+export function incrementReferenceCount(issueId: string, resolutionId?: string): Issue | undefined {
   const issues = loadIssues();
   const idx = issues.findIndex(i => i.id === issueId);
   if (idx === -1) return undefined;
   issues[idx].referenceCount = (issues[idx].referenceCount ?? 0) + 1;
+  if (resolutionId && Array.isArray(issues[idx].resolutions)) {
+    issues[idx].resolutions = issues[idx].resolutions!.map(resolution => (
+      resolution.id === resolutionId
+        ? { ...resolution, referenceCount: (resolution.referenceCount ?? 0) + 1 }
+        : resolution
+    ));
+  }
   saveIssues(issues);
   return issues[idx];
 }
@@ -378,9 +453,10 @@ export function getRelationshipForSource(sourceId: string): IssueRelationship | 
 
 export function calculateConfidenceScore(issue: Issue): number {
   let score = 0;
+  const description = getIssueDescriptionText(issue);
 
-  if (issue.description && issue.description.length > 50) score += 20;
-  if (issue.description && issue.description.length > 150) score += 10;
+  if (description && description.length > 50) score += 20;
+  if (description && description.length > 150) score += 10;
 
   if (issue.assignee) score += 15;
 
