@@ -5,6 +5,8 @@ import {
   updateIssue,
   deleteIssue,
   addResolution,
+  updateResolution,
+  deleteResolution,
   promoteToMasterIncident,
   demoteMasterIncident,
   linkIssueToMaster,
@@ -15,7 +17,7 @@ import {
   calculateConfidenceScore,
   incrementReferenceCount
 } from '../lib/db';
-import { Issue, Status, Severity, TagReference, RelationshipType, IssueRelationship, Tag } from '../types';
+import { Issue, Resolution, Status, Severity, TagReference, RelationshipType, IssueRelationship, Tag } from '../types';
 import { StatusBadge } from '../components/StatusBadge';
 import { SeverityBadge } from '../components/SeverityBadge';
 import { TagBadge } from '../components/TagBadge';
@@ -55,6 +57,8 @@ const RELATIONSHIP_LABELS: Record<RelationshipType, string> = {
   confirmed_same_root_cause: 'Same Root Cause'
 };
 
+const STATUS_OPTIONS: Status[] = ['Open', 'Investigating', 'Resolved', 'Closed'];
+
 const DATA_IMAGE_SRC_REGEX = /^data:image\/[a-z0-9.+-]+;base64,[a-z0-9+/=\s]+$/i;
 const STEP_BLOCK_TAGS = new Set([
   'address', 'article', 'aside', 'blockquote', 'div', 'dl', 'fieldset', 'figcaption', 'figure',
@@ -75,6 +79,15 @@ function parseImageToken(line: string): string | null {
   if (!trimmed.startsWith('[img:') || !trimmed.endsWith(']')) return null;
   const src = trimmed.slice(5, -1).trim();
   return isSafeDataImageSrc(src) ? src : null;
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function stepsHtmlToLines(html: string): string[] {
@@ -181,6 +194,23 @@ function normalizeSteps(steps: unknown): string[] {
   return [];
 }
 
+function stepsLinesToHtml(lines: string[]): string {
+  if (lines.length === 0) return '<p></p>';
+  const items = lines.map(line => {
+    const imageSrc = parseImageToken(line);
+    if (imageSrc) {
+      return `<li><img src=\"${imageSrc}\" alt=\"step image\" /></li>`;
+    }
+    return `<li>${escapeHtml(line)}</li>`;
+  });
+  return `<ol>${items.join('')}</ol>`;
+}
+
+function resolutionStepsToHtml(resolution: Resolution): string {
+  if (resolution.stepsHtml && resolution.stepsHtml.trim()) return resolution.stepsHtml;
+  return stepsLinesToHtml(normalizeSteps(resolution.steps));
+}
+
 function renderStepValue(step: string, index: number): React.ReactNode {
   const imageSrc = parseImageToken(step);
   if (imageSrc) {
@@ -216,6 +246,14 @@ export const IssueDetail: React.FC = () => {
   const [selectedLinkTarget, setSelectedLinkTarget] = useState<string>('');
   const [selectedRelType, setSelectedRelType] = useState<RelationshipType>('duplicate');
   const [copied, setCopied] = useState(false);
+  const [inlineStatusSaving, setInlineStatusSaving] = useState(false);
+  const [inlineStatusSaved, setInlineStatusSaved] = useState(false);
+  const [editingResolutionId, setEditingResolutionId] = useState<string | null>(null);
+  const [resolutionEditForm, setResolutionEditForm] = useState({
+    stepsHtml: '<p></p>',
+    notesHtml: '<p></p>',
+    notesText: ''
+  });
 
   const [editForm, setEditForm] = useState({
     title: '',
@@ -229,7 +267,6 @@ export const IssueDetail: React.FC = () => {
   });
 
   const [resolutionForm, setResolutionForm] = useState({
-    title: '',
     stepsHtml: '<p></p>',
     notesHtml: '<p></p>',
     notesText: ''
@@ -311,6 +348,20 @@ export const IssueDetail: React.FC = () => {
     loadIssue();
   };
 
+  const handleInlineStatusChange = (nextStatus: Status) => {
+    if (!id || !issue || nextStatus === issue.status) return;
+    setInlineStatusSaving(true);
+    const updated = updateIssue(id, { status: nextStatus });
+    if (updated) {
+      setIssue(updated);
+      setEditForm(prev => ({ ...prev, status: nextStatus }));
+      setAllIssues(getAllIssues());
+      setInlineStatusSaved(true);
+      setTimeout(() => setInlineStatusSaved(false), 1200);
+    }
+    setInlineStatusSaving(false);
+  };
+
   const handleDelete = () => {
     if (!id) return;
     deleteIssue(id);
@@ -319,20 +370,74 @@ export const IssueDetail: React.FC = () => {
 
   const handleAddResolution = () => {
     const steps = stepsHtmlToLines(resolutionForm.stepsHtml);
-    if (!id || !resolutionForm.title.trim() || steps.length === 0) return;
+    if (!id || steps.length === 0) return;
     const notesText = resolutionForm.notesText.trim();
     const notesHtml = resolutionForm.notesHtml.trim();
     const stepsHtml = resolutionForm.stepsHtml.trim();
     addResolution(id, {
-      title: resolutionForm.title.trim(),
       stepsHtml,
       steps,
       notes: notesText ? notesHtml : undefined,
       notesText: notesText || undefined
     });
-    setResolutionForm({ title: '', stepsHtml: '<p></p>', notesHtml: '<p></p>', notesText: '' });
+    setResolutionForm({ stepsHtml: '<p></p>', notesHtml: '<p></p>', notesText: '' });
     setShowResolutionForm(false);
     loadIssue();
+  };
+
+  const startResolutionEdit = (resolution: Resolution) => {
+    if (!resolution.id) return;
+    setShowResolutionForm(false);
+    setEditingResolutionId(resolution.id);
+    setResolutionEditForm({
+      stepsHtml: resolutionStepsToHtml(resolution),
+      notesHtml: resolution.notes ?? plainTextToHtml(resolution.notesText ?? ''),
+      notesText: resolution.notesText ?? ''
+    });
+  };
+
+  const cancelResolutionEdit = () => {
+    setEditingResolutionId(null);
+    setResolutionEditForm({
+      stepsHtml: '<p></p>',
+      notesHtml: '<p></p>',
+      notesText: ''
+    });
+  };
+
+  const handleSaveResolutionEdit = () => {
+    if (!id || !editingResolutionId) return;
+    const steps = stepsHtmlToLines(resolutionEditForm.stepsHtml);
+    if (steps.length === 0) return;
+
+    const notesText = resolutionEditForm.notesText.trim();
+    const notesHtml = resolutionEditForm.notesHtml.trim();
+    const updated = updateResolution(id, editingResolutionId, {
+      stepsHtml: resolutionEditForm.stepsHtml.trim(),
+      steps,
+      notes: notesText ? notesHtml : undefined,
+      notesText: notesText || undefined,
+    });
+
+    if (!updated) return;
+    setIssue(updated);
+    setAllIssues(getAllIssues());
+    cancelResolutionEdit();
+  };
+
+  const handleDeleteResolution = (resolutionId: string) => {
+    if (!id) return;
+    const confirmed = window.confirm('Delete this resolution?');
+    if (!confirmed) return;
+
+    const updated = deleteResolution(id, resolutionId);
+    if (!updated) return;
+    setIssue(updated);
+    setAllIssues(getAllIssues());
+
+    if (editingResolutionId === resolutionId) {
+      cancelResolutionEdit();
+    }
   };
 
   const handlePromote = () => {
@@ -442,6 +547,8 @@ export const IssueDetail: React.FC = () => {
   const confidenceScore = calculateConfidenceScore(issue);
   const issueResolutions = Array.isArray(issue.resolutions) ? issue.resolutions : [];
   const resolutionDraftSteps = stepsHtmlToLines(resolutionForm.stepsHtml);
+  const resolutionEditDraftSteps = stepsHtmlToLines(resolutionEditForm.stepsHtml);
+  const isResolutionEditing = editingResolutionId !== null;
 
   const linkableMasters = allIssues.filter(i =>
     i.id !== issue.id &&
@@ -613,12 +720,26 @@ export const IssueDetail: React.FC = () => {
                 value={editForm.status}
                 onChange={e => setEditForm(p => ({ ...p, status: e.target.value as Status }))}
               >
-                {(['Open','Investigating','Resolved','Closed'] as Status[]).map(s => (
+                {STATUS_OPTIONS.map(s => (
                   <option key={s} value={s}>{s}</option>
                 ))}
               </select>
             ) : (
-              <StatusBadge status={issue.status} />
+              <div className="flex items-center gap-2">
+                <StatusBadge status={issue.status} />
+                <select
+                  className="border rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-amber-500 bg-white border-slate-200 text-slate-900 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-100"
+                  value={issue.status}
+                  disabled={inlineStatusSaving}
+                  onChange={e => handleInlineStatusChange(e.target.value as Status)}
+                >
+                  {STATUS_OPTIONS.map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+                {inlineStatusSaving && <span className="text-xs text-slate-500 dark:text-zinc-500">Saving...</span>}
+                {!inlineStatusSaving && inlineStatusSaved && <span className="text-xs text-emerald-500">Saved</span>}
+              </div>
             )}
           </div>
 
@@ -677,6 +798,7 @@ export const IssueDetail: React.FC = () => {
                       label={tag.name}
                       color={tag.color}
                       selected={editForm.tags.includes(tag.name)}
+                      interactive
                       onClick={toggleTag}
                     />
                   ))}
@@ -842,7 +964,8 @@ export const IssueDetail: React.FC = () => {
             </div>
             <button
               onClick={() => setShowResolutionForm(!showResolutionForm)}
-              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border border-amber-500/20 transition-colors"
+              disabled={isResolutionEditing}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border border-amber-500/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Plus size={12} />
               Add Resolution
@@ -853,15 +976,6 @@ export const IssueDetail: React.FC = () => {
             <div className={`mb-4 p-4 rounded-lg border bg-slate-50 border-slate-200 dark:bg-zinc-800/50 dark:border-zinc-700`}>
               <p className={`text-xs font-semibold mb-3 text-slate-900 dark:text-zinc-300`}>New Resolution</p>
               <div className="space-y-3">
-                <div>
-                  <label className={`text-xs mb-1 block text-slate-500 dark:text-zinc-500`}>Title *</label>
-                  <input
-                    className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-500 bg-white border-slate-200 text-slate-900 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-200`}
-                    placeholder="Resolution title..."
-                    value={resolutionForm.title}
-                    onChange={e => setResolutionForm(p => ({ ...p, title: e.target.value }))}
-                  />
-                </div>
                 <div>
                   <label className={`text-xs mb-1 block text-slate-500 dark:text-zinc-500`}>Steps * (one per line)</label>
                   <RichTextEditor
@@ -882,13 +996,13 @@ export const IssueDetail: React.FC = () => {
                 <div className="flex gap-2">
                   <button
                     onClick={handleAddResolution}
-                    disabled={!resolutionForm.title.trim() || resolutionDraftSteps.length === 0}
+                    disabled={resolutionDraftSteps.length === 0}
                     className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-amber-500 text-zinc-900 text-xs font-semibold hover:bg-amber-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <Save size={12} /> Save Resolution
                   </button>
                   <button
-                    onClick={() => { setShowResolutionForm(false); setResolutionForm({ title: '', stepsHtml: '<p></p>', notesHtml: '<p></p>', notesText: '' }); }}
+                    onClick={() => { setShowResolutionForm(false); setResolutionForm({ stepsHtml: '<p></p>', notesHtml: '<p></p>', notesText: '' }); }}
                     className={`px-4 py-2 rounded-lg text-xs transition-colors bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 dark:bg-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-600`}
                   >
                     Cancel
@@ -903,47 +1017,109 @@ export const IssueDetail: React.FC = () => {
               {issueResolutions.map((res, idx) => {
                 const steps = normalizeSteps(res.steps);
                 const hasStepsHtml = typeof res.stepsHtml === 'string' && res.stepsHtml.trim().length > 0;
+                const isEditingThis = Boolean(res.id) && editingResolutionId === res.id;
+                const disableActions = isResolutionEditing && !isEditingThis;
                 return (
                   <div key={res.id ?? idx} className={`p-4 rounded-lg border bg-slate-50 border-slate-200 dark:bg-zinc-800/40 dark:border-zinc-700/50`}>
                     <div className="flex items-start justify-between mb-2">
-                      <h3 className={`text-sm font-semibold text-slate-900 dark:text-zinc-200`}>{res.title}</h3>
+                      <h3 className={`text-sm font-semibold text-slate-900 dark:text-zinc-200`}>
+                        {isEditingThis ? 'Edit Resolution' : `Resolution #${idx + 1}`}
+                      </h3>
                       <div className="flex items-center gap-2">
-                        {(res.referenceCount ?? 0) > 0 && (
+                        {!isEditingThis && (res.referenceCount ?? 0) > 0 && (
                           <span className={`text-xs text-slate-500 dark:text-zinc-500`}>{res.referenceCount} use{res.referenceCount !== 1 ? 's' : ''}</span>
                         )}
-                        <button
-                          onClick={() => handleIncrementReference(res.id ?? '')}
-                          className={`flex items-center gap-1 text-xs px-2 py-1 rounded transition-colors bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200 dark:bg-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-600 dark:hover:text-zinc-200`}
-                          title="Mark as used"
-                        >
-                          <BookOpen size={10} /> Used
-                        </button>
+                        {!isEditingThis && (
+                          <>
+                            <button
+                              onClick={() => handleIncrementReference(res.id ?? '')}
+                              disabled={disableActions || !res.id}
+                              className={`flex items-center gap-1 text-xs px-2 py-1 rounded transition-colors bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200 dark:bg-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-600 dark:hover:text-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed`}
+                              title="Mark as used"
+                            >
+                              <BookOpen size={10} /> Used
+                            </button>
+                            <button
+                              onClick={() => startResolutionEdit(res)}
+                              disabled={disableActions || !res.id}
+                              className="text-xs px-2 py-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDeleteResolution(res.id ?? '')}
+                              disabled={disableActions || !res.id}
+                              className="text-xs px-2 py-1 rounded border border-red-500/30 bg-red-500/10 text-red-500 hover:bg-red-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                              Delete
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
-                    {hasStepsHtml ? (
-                      <SanitizedHtmlContent
-                        html={res.stepsHtml}
-                        className="prose prose-sm max-w-none mb-2 text-slate-700 dark:text-zinc-300 dark:prose-invert prose-li:my-0 prose-img:rounded-md prose-img:border prose-img:border-slate-200 dark:prose-img:border-zinc-700"
-                      />
-                    ) : steps.length > 0 ? (
-                      <ol className="space-y-1 mb-2">
-                        {steps.map((step, si) => (
-                          <li key={si} className={`text-xs flex gap-2 text-slate-700 dark:text-zinc-400`}>
-                            <span className={`shrink-0 text-slate-400 dark:text-zinc-600`}>{si + 1}.</span>
-                            {renderStepValue(step, si)}
-                          </li>
-                        ))}
-                      </ol>
-                    ) : (
-                      <p className={`text-xs mb-2 text-slate-500 dark:text-zinc-500`}>No steps available.</p>
-                    )}
-                    {(res.notes || res.notesText) && (
-                      <div className="mt-2 pt-2 border-t border-slate-200 dark:border-zinc-700/50">
-                        <SanitizedHtmlContent
-                          html={res.notes ?? plainTextToHtml(res.notesText ?? '')}
-                          className="prose prose-sm max-w-none text-xs italic text-slate-600 dark:text-zinc-400 dark:prose-invert prose-img:rounded-md prose-img:border prose-img:border-slate-200 dark:prose-img:border-zinc-700"
-                        />
+                    {isEditingThis ? (
+                      <div className="space-y-3">
+                        <div>
+                          <label className={`text-xs mb-1 block text-slate-500 dark:text-zinc-500`}>Steps *</label>
+                          <RichTextEditor
+                            valueHtml={resolutionEditForm.stepsHtml}
+                            onChangeHtml={html => setResolutionEditForm(p => ({ ...p, stepsHtml: html }))}
+                            placeholder="Resolution steps..."
+                          />
+                        </div>
+                        <div>
+                          <label className={`text-xs mb-1 block text-slate-500 dark:text-zinc-500`}>Notes (optional)</label>
+                          <RichTextEditor
+                            valueHtml={resolutionEditForm.notesHtml}
+                            onChangeHtml={html => setResolutionEditForm(p => ({ ...p, notesHtml: html }))}
+                            onChangeText={text => setResolutionEditForm(p => ({ ...p, notesText: text }))}
+                            placeholder="Additional notes..."
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={handleSaveResolutionEdit}
+                            disabled={resolutionEditDraftSteps.length === 0}
+                            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-amber-500 text-zinc-900 text-xs font-semibold hover:bg-amber-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            <Save size={12} /> Save
+                          </button>
+                          <button
+                            onClick={cancelResolutionEdit}
+                            className="px-4 py-2 rounded-lg text-xs transition-colors bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 dark:bg-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-600"
+                          >
+                            Cancel
+                          </button>
+                        </div>
                       </div>
+                    ) : (
+                      <>
+                        {hasStepsHtml ? (
+                          <SanitizedHtmlContent
+                            html={res.stepsHtml}
+                            className="prose prose-sm max-w-none mb-2 text-slate-700 dark:text-zinc-300 dark:prose-invert prose-li:my-0 prose-img:rounded-md prose-img:border prose-img:border-slate-200 dark:prose-img:border-zinc-700"
+                          />
+                        ) : steps.length > 0 ? (
+                          <ol className="space-y-1 mb-2">
+                            {steps.map((step, si) => (
+                              <li key={si} className={`text-xs flex gap-2 text-slate-700 dark:text-zinc-400`}>
+                                <span className={`shrink-0 text-slate-400 dark:text-zinc-600`}>{si + 1}.</span>
+                                {renderStepValue(step, si)}
+                              </li>
+                            ))}
+                          </ol>
+                        ) : (
+                          <p className={`text-xs mb-2 text-slate-500 dark:text-zinc-500`}>No steps available.</p>
+                        )}
+                        {(res.notes || res.notesText) && (
+                          <div className="mt-2 pt-2 border-t border-slate-200 dark:border-zinc-700/50">
+                            <SanitizedHtmlContent
+                              html={res.notes ?? plainTextToHtml(res.notesText ?? '')}
+                              className="prose prose-sm max-w-none text-xs italic text-slate-600 dark:text-zinc-400 dark:prose-invert prose-img:rounded-md prose-img:border prose-img:border-slate-200 dark:prose-img:border-zinc-700"
+                            />
+                          </div>
+                        )}
+                      </>
                     )}
                     {res.createdAt && (
                       <p className={`text-xs mt-2 text-slate-400 dark:text-zinc-600`}>{formatRelativeTime(res.createdAt)}</p>

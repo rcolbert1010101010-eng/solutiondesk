@@ -26,6 +26,7 @@ export interface Resolution {
   notes?: string;
   notesText?: string;
   createdAt?: string;
+  updatedAt?: string;
   resolvedAt?: string;
   resolvedBy?: string;
   referenceCount?: number;

@@ -5,6 +5,14 @@ import { getIssueDescriptionText, htmlToPlainText, plainTextToHtml } from './ric
 const STORAGE_KEY = 'resolution_desk_issues';
 const RELATIONSHIPS_KEY = 'resolution_desk_relationships';
 
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function createResolutionId(): string {
+  return `RES-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
 const defaultIssues: Issue[] = [
   {
     id: 'ISS-001',
@@ -170,6 +178,18 @@ function canonicalizeIssueTags(tags?: TagReference[]): TagReference[] {
 
 function normalizeResolutionContent(resolution: Resolution): Resolution {
   const normalized = { ...resolution };
+  const timestamp = nowIso();
+
+  if (!normalized.id) {
+    normalized.id = createResolutionId();
+  }
+  if (!normalized.createdAt) {
+    normalized.createdAt = normalized.resolvedAt ?? timestamp;
+  }
+  if (!normalized.updatedAt) {
+    normalized.updatedAt = normalized.createdAt ?? timestamp;
+  }
+
   if (normalized.notes && !normalized.notesText) {
     normalized.notesText = htmlToPlainText(normalized.notes);
   } else if (!normalized.notes && normalized.notesText) {
@@ -342,12 +362,15 @@ export function addResolution(issueId: string, resolution: Omit<Resolution, 'id'
   const issues = loadIssues();
   const idx = issues.findIndex(i => i.id === issueId);
   if (idx === -1) return undefined;
+  const timestamp = nowIso();
   const normalizedResolution = normalizeResolutionContent({
     ...resolution,
   });
   const newResolution: Resolution = {
     ...normalizedResolution,
-    id: `RES-${Date.now()}`
+    id: normalizedResolution.id ?? createResolutionId(),
+    createdAt: normalizedResolution.createdAt ?? timestamp,
+    updatedAt: timestamp,
   };
   if (!issues[idx].resolutions) {
     issues[idx].resolutions = [];
@@ -355,6 +378,47 @@ export function addResolution(issueId: string, resolution: Omit<Resolution, 'id'
   issues[idx].resolutions!.push(newResolution);
   saveIssues(issues);
   return issues[idx];
+}
+
+export function updateResolution(
+  issueId: string,
+  resolutionId: string,
+  updates: Partial<Resolution>
+): Issue | undefined {
+  const issues = loadIssues();
+  const issueIdx = issues.findIndex(i => i.id === issueId);
+  if (issueIdx === -1 || !Array.isArray(issues[issueIdx].resolutions)) return undefined;
+
+  const resolutions = issues[issueIdx].resolutions!;
+  const resolutionIdx = resolutions.findIndex(resolution => resolution.id === resolutionId);
+  if (resolutionIdx === -1) return undefined;
+
+  const current = resolutions[resolutionIdx];
+  const merged = normalizeResolutionContent({
+    ...current,
+    ...updates,
+    id: current.id,
+    createdAt: current.createdAt ?? nowIso(),
+    updatedAt: nowIso(),
+  });
+
+  resolutions[resolutionIdx] = merged;
+  issues[issueIdx].resolutions = resolutions;
+  saveIssues(issues);
+  return issues[issueIdx];
+}
+
+export function deleteResolution(issueId: string, resolutionId: string): Issue | undefined {
+  const issues = loadIssues();
+  const issueIdx = issues.findIndex(i => i.id === issueId);
+  if (issueIdx === -1 || !Array.isArray(issues[issueIdx].resolutions)) return undefined;
+
+  const nextResolutions = issues[issueIdx].resolutions!.filter(resolution => resolution.id !== resolutionId);
+  if (nextResolutions.length === issues[issueIdx].resolutions!.length) return undefined;
+
+  issues[issueIdx].resolutions = nextResolutions;
+  saveIssues(issues);
+  return issues[issueIdx];
 }
 
 export function incrementReferenceCount(issueId: string, resolutionId?: string): Issue | undefined {

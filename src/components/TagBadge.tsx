@@ -9,6 +9,7 @@ interface TagBadgeProps {
   size?: 'sm' | 'md';
   onClick?: (tag: string) => void;
   selected?: boolean;
+  interactive?: boolean;
   removable?: boolean;
   onRemove?: (tag: string) => void;
 }
@@ -39,6 +40,7 @@ export const TagBadge: React.FC<TagBadgeProps> = ({
   size = 'md',
   onClick,
   selected = false,
+  interactive = false,
   removable = false,
   onRemove
 }) => {
@@ -55,17 +57,24 @@ export const TagBadge: React.FC<TagBadgeProps> = ({
   const resolvedColor = color ?? tagRecord?.color ?? fallbackColorFromTag(resolvedLabel);
 
   const sizeClasses = size === 'sm' ? 'text-xs px-2 py-0.5' : 'text-xs px-2.5 py-1';
-  const style: React.CSSProperties = {
-    color: resolvedColor,
-    borderColor: withAlpha(resolvedColor, selected ? '66' : '3D'),
-    backgroundColor: withAlpha(resolvedColor, selected ? '26' : '14'),
-  };
+  const useNeutralStyle = interactive && !selected;
+  const style: React.CSSProperties | undefined = useNeutralStyle
+    ? undefined
+    : {
+        color: resolvedColor,
+        borderColor: withAlpha(resolvedColor, selected ? '66' : '3D'),
+        backgroundColor: withAlpha(resolvedColor, selected ? '26' : '14'),
+      };
 
   return (
     <span
       className={`inline-flex items-center gap-1 rounded-full font-medium transition-colors ${
         onClick ? 'cursor-pointer' : ''
-      } ${sizeClasses} border`}
+      } ${sizeClasses} border ${
+        useNeutralStyle
+          ? 'bg-slate-100 border-slate-300 text-slate-700 hover:bg-slate-200 hover:border-slate-400 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-700 dark:hover:border-zinc-600'
+          : ''
+      }`}
       style={style}
       onClick={onClick ? () => onClick(tag) : undefined}
     >

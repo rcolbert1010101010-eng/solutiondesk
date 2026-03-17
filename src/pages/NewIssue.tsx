@@ -322,6 +322,7 @@ export const NewIssue: React.FC = () => {
                       label={tag.name}
                       color={tag.color}
                       selected={selectedTags.includes(tag.name)}
+                      interactive
                       onClick={toggleTag}
                     />
                   ))}
