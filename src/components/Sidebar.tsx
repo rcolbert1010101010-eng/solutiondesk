@@ -22,7 +22,7 @@ export const Sidebar: React.FC = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
-  const { currentUser, logout } = useAuth();
+  const { currentUser, signOut } = useAuth();
 
   const isDark = theme === 'dark';
   const isAdmin = currentUser?.role === 'admin';
@@ -53,7 +53,7 @@ export const Sidebar: React.FC = () => {
   ];
 
   const handleLogout = () => {
-    logout();
+    void signOut();
     setMobileOpen(false);
   };
 

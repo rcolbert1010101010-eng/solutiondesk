@@ -1,175 +1,335 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import type { Session, User } from '@supabase/supabase-js';
+import { supabase } from '../lib/supabaseClient';
 
-export type Role = 'admin' | 'member';
+export type Role = 'admin' | 'user';
+
+type AuthResult = {
+  success: boolean;
+  error?: string;
+  message?: string;
+  requiresEmailConfirmation?: boolean;
+};
 
 export interface AppUser {
   id: string;
   email: string;
   role: Role;
+  displayName: string | null;
+}
+
+export interface Profile {
+  id: string;
+  email: string;
+  displayName: string | null;
+  role: Role;
   createdAt: string;
-  active: boolean;
-  passwordHash: string;
-  mustChangePassword?: boolean;
+  updatedAt: string;
+}
+
+interface ProfileRow {
+  id: string;
+  email: string;
+  display_name: string | null;
+  role: string;
+  created_at: string;
+  updated_at: string;
 }
 
 interface AuthState {
-  currentUser: Omit<AppUser, 'passwordHash'> | null;
+  currentUser: AppUser | null;
   isLoading: boolean;
 }
 
 interface AuthContextValue extends AuthState {
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  logout: () => void;
-  getUsers: () => Omit<AppUser, 'passwordHash'>[];
-  createUser: (email: string, password: string, role: Role) => Promise<{ success: boolean; error?: string }>;
+  signIn: (email: string, password: string) => Promise<AuthResult>;
+  signUp: (email: string, password: string, displayName?: string) => Promise<AuthResult>;
+  signOut: () => Promise<AuthResult>;
+  listProfiles: () => Promise<{ success: boolean; data: Profile[]; error?: string }>;
+  updateProfileRole: (id: string, role: Role) => Promise<AuthResult>;
+  refreshCurrentUser: () => Promise<void>;
 }
 
-const USERS_KEY = 'irm_users';
-const SESSION_KEY = 'irm_session';
+const SEEDED_ADMIN_EMAIL = 'randy.colbert@illinois.gov';
 
-// Simple deterministic hash — not cryptographic, but not plaintext either.
-// For a purely in-browser demo app with no backend this is the best we can do
-// while still following "no external services" constraints.
-function hashPassword(password: string): string {
-  let hash = 0x811c9dc5;
-  for (let i = 0; i < password.length; i++) {
-    hash ^= password.charCodeAt(i);
-    hash = (hash * 0x01000193) >>> 0;
-  }
-  // salt prefix so raw number is less obvious
-  return 'h2$' + hash.toString(16).padStart(8, '0');
+function normalizeEmail(email: string | null | undefined): string {
+  return email?.trim().toLowerCase() ?? '';
 }
 
-const SEED_ADMIN: AppUser = {
-  id: 'user_seed_admin_001',
-  email: 'randy.colbert@illinois.gov',
-  role: 'admin',
-  createdAt: new Date('2024-01-01T00:00:00.000Z').toISOString(),
-  active: true,
-  passwordHash: hashPassword('Tal08!12Ray'),
-  mustChangePassword: false,
-};
-
-function loadUsers(): AppUser[] {
-  try {
-    const raw = localStorage.getItem(USERS_KEY);
-    if (raw) {
-      const parsed: AppUser[] = JSON.parse(raw);
-      // Ensure seed admin always exists
-      const hasSeed = parsed.some(u => u.id === SEED_ADMIN.id);
-      if (!hasSeed) {
-        const withSeed = [SEED_ADMIN, ...parsed];
-        localStorage.setItem(USERS_KEY, JSON.stringify(withSeed));
-        return withSeed;
-      }
-      return parsed;
-    }
-  } catch {
-    // ignore
-  }
-  const initial = [SEED_ADMIN];
-  localStorage.setItem(USERS_KEY, JSON.stringify(initial));
-  return initial;
+function normalizeRole(role: string | null | undefined): Role {
+  return role === 'admin' ? 'admin' : 'user';
 }
 
-function saveUsers(users: AppUser[]) {
-  localStorage.setItem(USERS_KEY, JSON.stringify(users));
+function fallbackRoleForEmail(email: string): Role {
+  return normalizeEmail(email) === SEEDED_ADMIN_EMAIL ? 'admin' : 'user';
 }
 
-function loadSession(): string | null {
-  try {
-    return localStorage.getItem(SESSION_KEY);
-  } catch {
-    return null;
-  }
+function getDisplayNameFromAuthUser(user: User): string | null {
+  const metadata = user.user_metadata as Record<string, unknown> | null;
+  const candidate = metadata?.display_name ?? metadata?.full_name ?? metadata?.name;
+  if (typeof candidate !== 'string') return null;
+  const trimmed = candidate.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
-function saveSession(userId: string | null) {
-  if (userId) {
-    localStorage.setItem(SESSION_KEY, userId);
-  } else {
-    localStorage.removeItem(SESSION_KEY);
-  }
+function toProfile(row: ProfileRow): Profile {
+  return {
+    id: row.id,
+    email: normalizeEmail(row.email),
+    displayName: row.display_name,
+    role: normalizeRole(row.role),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function toAppUser(profile: Profile): AppUser {
+  return {
+    id: profile.id,
+    email: profile.email,
+    role: profile.role,
+    displayName: profile.displayName,
+  };
+}
+
+function mapSupabaseError(error: { message?: string } | null | undefined, fallback: string): string {
+  return error?.message?.trim() || fallback;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState<Omit<AppUser, 'passwordHash'> | null>(null);
+  const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const loadProfileForUser = useCallback(async (user: User, displayNameOverride?: string | null): Promise<Profile | null> => {
+    const email = normalizeEmail(user.email);
+    if (!email) return null;
+
+    const providedDisplayName = displayNameOverride?.trim();
+    const displayName = providedDisplayName || getDisplayNameFromAuthUser(user);
+
+    const { error: upsertError } = await supabase
+      .from('profiles')
+      .upsert(
+        {
+          id: user.id,
+          email,
+          display_name: displayName ?? null,
+        },
+        { onConflict: 'id' },
+      );
+
+    if (upsertError) {
+      console.warn('Profile upsert skipped. Using fallback role.', upsertError.message);
+      return null;
+    }
+
+    const { error: bootstrapError } = await supabase.rpc('claim_first_admin', { target_email: email });
+    if (bootstrapError) {
+      console.warn('Admin bootstrap RPC not applied.', bootstrapError.message);
+    }
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id,email,display_name,role,created_at,updated_at')
+      .eq('id', user.id)
+      .maybeSingle<ProfileRow>();
+
+    if (error) {
+      console.warn('Profile fetch skipped. Using fallback role.', error.message);
+      return null;
+    }
+
+    if (!data) return null;
+    return toProfile(data);
+  }, []);
+
+  const syncSession = useCallback(async (session: Session | null, displayNameOverride?: string | null) => {
+    if (!session?.user) {
+      setCurrentUser(null);
+      return;
+    }
+
+    const sessionEmail = normalizeEmail(session.user.email);
+    const profile = await loadProfileForUser(session.user, displayNameOverride);
+
+    if (profile) {
+      setCurrentUser(toAppUser(profile));
+      return;
+    }
+
+    setCurrentUser({
+      id: session.user.id,
+      email: sessionEmail,
+      role: fallbackRoleForEmail(sessionEmail),
+      displayName: getDisplayNameFromAuthUser(session.user),
+    });
+  }, [loadProfileForUser]);
+
   useEffect(() => {
-    // Restore session on mount
-    const users = loadUsers();
-    const sessionUserId = loadSession();
-    if (sessionUserId) {
-      const found = users.find(u => u.id === sessionUserId && u.active);
-      if (found) {
-        const { passwordHash: _ph, ...rest } = found;
-        setCurrentUser(rest);
-      } else {
-        saveSession(null);
+    let isMounted = true;
+
+    const initialize = async () => {
+      const { data, error } = await supabase.auth.getSession();
+      if (!isMounted) return;
+
+      if (error) {
+        console.error('Unable to restore Supabase session.', error);
+        setCurrentUser(null);
+        setIsLoading(false);
+        return;
       }
-    }
-    setIsLoading(false);
-  }, []);
 
-  const login = useCallback(async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    const users = loadUsers();
-    const user = users.find(u => u.email.toLowerCase() === email.toLowerCase().trim());
-    if (!user) {
-      return { success: false, error: 'Invalid email or password.' };
+      await syncSession(data.session);
+      if (isMounted) setIsLoading(false);
+    };
+
+    void initialize();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      void syncSession(session);
+    });
+
+    return () => {
+      isMounted = false;
+      authListener.subscription.unsubscribe();
+    };
+  }, [syncSession]);
+
+  const refreshCurrentUser = useCallback(async () => {
+    const { data } = await supabase.auth.getSession();
+    await syncSession(data.session);
+  }, [syncSession]);
+
+  const signIn = useCallback(async (email: string, password: string): Promise<AuthResult> => {
+    const normalizedEmail = normalizeEmail(email);
+    if (!normalizedEmail) return { success: false, error: 'Email is required.' };
+    if (!password) return { success: false, error: 'Password is required.' };
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: normalizedEmail,
+      password,
+    });
+
+    if (error) {
+      return {
+        success: false,
+        error: mapSupabaseError(error, 'Login failed.'),
+      };
     }
-    if (!user.active) {
-      return { success: false, error: 'This account has been deactivated.' };
-    }
-    if (user.passwordHash !== hashPassword(password)) {
-      return { success: false, error: 'Invalid email or password.' };
-    }
-    const { passwordHash: _ph, ...rest } = user;
-    setCurrentUser(rest);
-    saveSession(user.id);
+
+    await syncSession(data.session);
     return { success: true };
-  }, []);
+  }, [syncSession]);
 
-  const logout = useCallback(() => {
-    setCurrentUser(null);
-    saveSession(null);
-  }, []);
+  const signUp = useCallback(async (email: string, password: string, displayName?: string): Promise<AuthResult> => {
+    const normalizedEmail = normalizeEmail(email);
+    const cleanedDisplayName = displayName?.trim() || undefined;
 
-  const getUsers = useCallback((): Omit<AppUser, 'passwordHash'>[] => {
-    return loadUsers().map(({ passwordHash: _ph, ...rest }) => rest);
-  }, []);
-
-  const createUser = useCallback(async (email: string, password: string, role: Role): Promise<{ success: boolean; error?: string }> => {
-    const trimmedEmail = email.toLowerCase().trim();
-    if (!trimmedEmail) return { success: false, error: 'Email is required.' };
+    if (!normalizedEmail) return { success: false, error: 'Email is required.' };
     if (!password) return { success: false, error: 'Password is required.' };
     if (password.length < 6) return { success: false, error: 'Password must be at least 6 characters.' };
 
-    const users = loadUsers();
-    const exists = users.some(u => u.email.toLowerCase() === trimmedEmail);
-    if (exists) {
-      return { success: false, error: 'A user with this email already exists.' };
+    const { data, error } = await supabase.auth.signUp({
+      email: normalizedEmail,
+      password,
+      options: {
+        data: {
+          ...(cleanedDisplayName ? { display_name: cleanedDisplayName } : {}),
+        },
+      },
+    });
+
+    if (error) {
+      return {
+        success: false,
+        error: mapSupabaseError(error, 'Sign up failed.'),
+      };
     }
 
-    const newUser: AppUser = {
-      id: 'user_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
-      email: trimmedEmail,
-      role,
-      createdAt: new Date().toISOString(),
-      active: true,
-      passwordHash: hashPassword(password),
-      mustChangePassword: false,
-    };
+    const requiresEmailConfirmation = !data.session;
 
-    const updated = [...users, newUser];
-    saveUsers(updated);
+    if (data.session) {
+      await syncSession(data.session, cleanedDisplayName ?? null);
+    }
+
+    return {
+      success: true,
+      requiresEmailConfirmation,
+      message: requiresEmailConfirmation
+        ? 'Account created. Check your email to confirm your account before signing in.'
+        : 'Account created. You are now signed in.',
+    };
+  }, [syncSession]);
+
+  const signOut = useCallback(async (): Promise<AuthResult> => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      return {
+        success: false,
+        error: mapSupabaseError(error, 'Sign out failed.'),
+      };
+    }
+
+    setCurrentUser(null);
     return { success: true };
   }, []);
 
+  const listProfiles = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id,email,display_name,role,created_at,updated_at')
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      return {
+        success: false as const,
+        data: [] as Profile[],
+        error: mapSupabaseError(error, 'Failed to load users.'),
+      };
+    }
+
+    const profiles = (data ?? []).map(row => toProfile(row as ProfileRow));
+    return {
+      success: true as const,
+      data: profiles,
+    };
+  }, []);
+
+  const updateProfileRole = useCallback(async (id: string, role: Role): Promise<AuthResult> => {
+    const { error } = await supabase
+      .from('profiles')
+      .update({ role })
+      .eq('id', id);
+
+    if (error) {
+      return {
+        success: false,
+        error: mapSupabaseError(error, 'Failed to update role.'),
+      };
+    }
+
+    if (currentUser?.id === id) {
+      setCurrentUser(prev => (prev ? { ...prev, role } : prev));
+    }
+
+    return { success: true };
+  }, [currentUser?.id]);
+
   return (
-    <AuthContext.Provider value={{ currentUser, isLoading, login, logout, getUsers, createUser }}>
+    <AuthContext.Provider
+      value={{
+        currentUser,
+        isLoading,
+        signIn,
+        signUp,
+        signOut,
+        listProfiles,
+        updateProfileRole,
+        refreshCurrentUser,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

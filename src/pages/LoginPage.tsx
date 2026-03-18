@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { Zap, Mail, Lock, AlertCircle, Eye, EyeOff } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
-  const { login } = useAuth();
+  const { signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -18,25 +18,24 @@ export const LoginPage: React.FC = () => {
       setError('Email is required.');
       return;
     }
+
     if (!password) {
       setError('Password is required.');
       return;
     }
 
     setLoading(true);
-    const result = await login(email, password);
+    const result = await signIn(email, password);
     setLoading(false);
 
     if (!result.success) {
       setError(result.error || 'Login failed.');
     }
-    // On success, AuthContext updates currentUser and App.tsx re-renders to show AppShell
   };
 
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-[#0f0f10] flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        {/* Logo */}
         <div className="flex items-center justify-center gap-3 mb-8">
           <div className="w-10 h-10 bg-amber-400 rounded-xl flex items-center justify-center shadow-lg">
             <Zap size={22} className="text-zinc-900" fill="currentColor" />
@@ -47,7 +46,6 @@ export const LoginPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Card */}
         <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-8">
           <h2 className="text-lg font-semibold text-slate-800 mb-1">Sign in to your account</h2>
           <p className="text-sm text-slate-500 mb-6">Enter your credentials to continue.</p>
@@ -60,7 +58,6 @@ export const LoginPage: React.FC = () => {
           )}
 
           <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
-            {/* Email */}
             <div>
               <label htmlFor="login-email" className="block text-xs font-medium text-slate-600 mb-1.5">
                 Email address
@@ -79,7 +76,6 @@ export const LoginPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Password */}
             <div>
               <label htmlFor="login-password" className="block text-xs font-medium text-slate-600 mb-1.5">
                 Password
@@ -92,7 +88,7 @@ export const LoginPage: React.FC = () => {
                   autoComplete="current-password"
                   value={password}
                   onChange={e => { setPassword(e.target.value); setError(''); }}
-                  placeholder="••••••••"
+                  placeholder="********"
                   className="w-full pl-9 pr-10 py-2.5 border border-slate-300 rounded-lg text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20 transition-colors"
                 />
                 <button
@@ -111,13 +107,13 @@ export const LoginPage: React.FC = () => {
               disabled={loading}
               className="w-full py-2.5 bg-amber-400 hover:bg-amber-300 disabled:opacity-60 disabled:cursor-not-allowed text-zinc-900 font-semibold rounded-lg text-sm transition-colors mt-1"
             >
-              {loading ? 'Signing in…' : 'Sign in'}
+              {loading ? 'Signing in...' : 'Sign in'}
             </button>
           </form>
         </div>
 
         <p className="text-center text-xs text-slate-400 mt-6">
-          Contact your administrator to get access.
+          Accounts are created by administrators in User Management.
         </p>
       </div>
     </div>
