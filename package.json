@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "node -e \"console.log('VITE_SUPABASE_URL present:', !!process.env.VITE_SUPABASE_URL); console.log('VITE_SUPABASE_ANON_KEY present:', !!process.env.VITE_SUPABASE_ANON_KEY); if(!process.env.VITE_SUPABASE_URL || !process.env.VITE_SUPABASE_ANON_KEY){ process.exit(1); }\"",
     "build": "vite build",
     "preview": "vite preview"
   },
