@@ -33,9 +33,6 @@ export const IssueCard: React.FC<IssueCardProps> = ({ issue }) => {
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <span className={`text-xs font-mono ${
-              isDark ? 'text-zinc-500' : 'text-slate-400'
-            }`}>{issue.id}</span>
             {issue.isMasterIncident && (
               <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full bg-violet-500/15 text-violet-400 border border-violet-500/25">
                 <Star size={9} fill="currentColor" /> Master

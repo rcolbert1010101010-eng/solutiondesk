@@ -6,7 +6,7 @@ import { SeverityBadge } from './SeverityBadge';
 import { TagBadge } from './TagBadge';
 import { ConfidenceBadge } from './ConfidenceBadge';
 import { formatRelativeTime } from '../lib/utils';
-import { ArrowUpDown, CheckCircle2, Star, Link } from 'lucide-react';
+import { CheckCircle2, Star, Link } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 
 interface IssueTableProps {
@@ -35,11 +35,6 @@ export const IssueTable: React.FC<IssueTableProps> = ({ issues }) => {
           <tr className={`border-b ${
             isDark ? 'border-zinc-800' : 'border-slate-200'
           }`}>
-            <th className={`text-left text-xs font-medium uppercase tracking-wider pb-3 px-4 w-24 ${
-              isDark ? 'text-zinc-500' : 'text-slate-400'
-            }`}>
-              <span className="flex items-center gap-1">ID <ArrowUpDown size={10} /></span>
-            </th>
             <th className={`text-left text-xs font-medium uppercase tracking-wider pb-3 px-4 ${
               isDark ? 'text-zinc-500' : 'text-slate-400'
             }`}>Title</th>
@@ -74,17 +69,10 @@ export const IssueTable: React.FC<IssueTableProps> = ({ issues }) => {
                 }`}
               >
                 <td className="py-3.5 px-4">
-                  <div className="flex items-center gap-1.5">
-                    <span className={`text-xs font-mono ${
-                      isDark ? 'text-zinc-500' : 'text-slate-400'
-                    }`}>{issue.id}</span>
-                    {issue.isMasterIncident && (
-                      <Star size={10} className="text-violet-400" fill="currentColor" />
-                    )}
-                  </div>
-                </td>
-                <td className="py-3.5 px-4">
                   <div className="flex items-center gap-2">
+                    {issue.isMasterIncident && (
+                      <Star size={10} className="text-violet-400 flex-shrink-0" fill="currentColor" />
+                    )}
                     <span className={`text-sm font-medium max-w-xs truncate ${
                       isDark ? 'text-zinc-200 group-hover:text-white' : 'text-slate-700 group-hover:text-slate-900'
                     }`}>

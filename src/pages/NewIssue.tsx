@@ -9,6 +9,12 @@ import { SemanticMatchCard } from '../components/SemanticMatchCard';
 import { semanticSearch, SemanticMatch } from '../lib/semanticSearch';
 import { createTag, getTagByName, listTags, normalizeTagName, TAGS_CHANGED_EVENT } from '../lib/tags';
 import {
+  createSystemAffected,
+  listSystemsAffected,
+  normalizeSystemAffectedName,
+  SYSTEMS_AFFECTED_CHANGED_EVENT,
+} from '../lib/systemsAffected';
+import {
   Save,
   X,
   AlertTriangle,
@@ -29,6 +35,10 @@ export const NewIssue: React.FC = () => {
   const [descriptionHtml, setDescriptionHtml] = useState('<p></p>');
   const [descriptionText, setDescriptionText] = useState('');
   const [systemAffected, setSystemAffected] = useState('');
+  const [availableSystems, setAvailableSystems] = useState<{ id: string; name: string }[]>([]);
+  const [quickSystemInput, setQuickSystemInput] = useState('');
+  const [quickSystemMessage, setQuickSystemMessage] = useState('');
+  const [quickSystemMessageTone, setQuickSystemMessageTone] = useState<'info' | 'success' | 'error'>('info');
   const [severity, setSeverity] = useState<Severity>('Medium');
   const [selectedTags, setSelectedTags] = useState<TagReference[]>([]);
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
@@ -48,16 +58,20 @@ export const NewIssue: React.FC = () => {
   const [selectedSuggestionId, setSelectedSuggestionId] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const refreshTags = async () => setAvailableTags(await listTags());
+  const refreshSystems = async () => setAvailableSystems(await listSystemsAffected());
 
   useEffect(() => {
     const loadIssues = async () => setAllIssues(await getAllIssues());
     void loadIssues();
     void refreshTags();
+    void refreshSystems();
     window.addEventListener(ISSUES_CHANGED_EVENT, loadIssues);
     window.addEventListener(TAGS_CHANGED_EVENT, refreshTags);
+    window.addEventListener(SYSTEMS_AFFECTED_CHANGED_EVENT, refreshSystems);
     return () => {
       window.removeEventListener(ISSUES_CHANGED_EVENT, loadIssues);
       window.removeEventListener(TAGS_CHANGED_EVENT, refreshTags);
+      window.removeEventListener(SYSTEMS_AFFECTED_CHANGED_EVENT, refreshSystems);
     };
   }, []);
 
@@ -69,6 +83,10 @@ export const NewIssue: React.FC = () => {
   const quickTagNormalized = normalizeTagName(quickTagInput);
   const duplicateQuickTag = quickTagNormalized
     ? availableTags.find(tag => normalizeTagName(tag.name) === quickTagNormalized)
+    : undefined;
+  const quickSystemNormalized = normalizeSystemAffectedName(quickSystemInput);
+  const duplicateQuickSystem = quickSystemNormalized
+    ? availableSystems.find(system => normalizeSystemAffectedName(system.name) === quickSystemNormalized)
     : undefined;
 
   // Build search query from title + description + system
@@ -134,6 +152,29 @@ export const NewIssue: React.FC = () => {
       }
       setQuickTagMessage(err instanceof Error ? err.message : 'Unable to add tag.');
       setQuickTagMessageTone('error');
+    }
+  };
+
+  const handleQuickAddSystem = async () => {
+    if (!quickSystemNormalized) return;
+
+    if (duplicateQuickSystem) {
+      setSystemAffected(duplicateQuickSystem.name);
+      setQuickSystemMessage('System already exists - selected it.');
+      setQuickSystemMessageTone('info');
+      return;
+    }
+
+    try {
+      const created = await createSystemAffected(quickSystemInput);
+      await refreshSystems();
+      setSystemAffected(created.name);
+      setQuickSystemInput('');
+      setQuickSystemMessage('System added and selected.');
+      setQuickSystemMessageTone('success');
+    } catch (err) {
+      setQuickSystemMessage(err instanceof Error ? err.message : 'Unable to add system.');
+      setQuickSystemMessageTone('error');
     }
   };
 
@@ -236,19 +277,66 @@ export const NewIssue: React.FC = () => {
               <label className={`block text-xs font-medium mb-1.5 text-slate-700 dark:text-zinc-400`}>
                 System Affected <span className="text-red-400">*</span>
               </label>
-              <div className="relative">
-                <Monitor size={14} className={`absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-zinc-500`} />
-                <input
-                  type="text"
-                  value={systemAffected}
-                  onChange={e => setSystemAffected(e.target.value)}
-                  placeholder="e.g. Network / VPN, Email / Exchange, Active Directory"
-                  className={`w-full border rounded-lg pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-1 transition-colors bg-white text-slate-900 placeholder-slate-400 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder-zinc-500 ${
-                    errors.systemAffected
-                      ? 'border-red-500/50 focus:border-red-500/50 focus:ring-red-500/20'
-                      : `border-slate-200 dark:border-zinc-700 focus:border-amber-500/50 focus:ring-amber-500/20`
-                  }`}
-                />
+              <div className="space-y-2">
+                <div className="relative">
+                  <Monitor size={14} className={`absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-zinc-500`} />
+                  <select
+                    value={systemAffected}
+                    onChange={e => setSystemAffected(e.target.value)}
+                    className={`w-full border rounded-lg pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-1 transition-colors bg-white text-slate-900 dark:bg-zinc-900 dark:text-zinc-100 ${
+                      errors.systemAffected
+                        ? 'border-red-500/50 focus:border-red-500/50 focus:ring-red-500/20'
+                        : `border-slate-200 dark:border-zinc-700 focus:border-amber-500/50 focus:ring-amber-500/20`
+                    }`}
+                  >
+                    <option value="">Select a system...</option>
+                    {availableSystems.map(system => (
+                      <option key={system.id} value={system.name}>{system.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={quickSystemInput}
+                    onChange={e => {
+                      setQuickSystemInput(e.target.value);
+                      setQuickSystemMessage('');
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleQuickAddSystem();
+                      }
+                    }}
+                    placeholder="Quick add system..."
+                    className="flex-1 border rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 bg-white border-slate-200 text-slate-900 placeholder-slate-400 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-100 dark:placeholder-zinc-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleQuickAddSystem}
+                    disabled={!quickSystemNormalized}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-400 text-zinc-900 hover:bg-amber-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Add
+                  </button>
+                </div>
+                {quickSystemMessage && (
+                  <p className={`text-xs ${
+                    quickSystemMessageTone === 'error'
+                      ? 'text-red-500'
+                      : quickSystemMessageTone === 'success'
+                        ? 'text-emerald-500'
+                        : 'text-amber-500'
+                  }`}>
+                    {quickSystemMessage}
+                  </p>
+                )}
+                {!quickSystemMessage && duplicateQuickSystem && (
+                  <p className="text-xs text-amber-500">
+                    System already exists. Click Add to select it.
+                  </p>
+                )}
               </div>
               {errors.systemAffected && <p className="text-xs text-red-400 mt-1">{errors.systemAffected}</p>}
             </div>

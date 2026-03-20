@@ -16,6 +16,9 @@ export interface Tag {
 export interface Resolution {
   id?: string;
   issueId?: string | null;
+  sourceType?: 'library' | 'issue';
+  sourceIssueId?: string;
+  sourceIssueTitle?: string;
   title?: string;
   summary?: string;
   rootCause?: string;
@@ -72,4 +75,11 @@ export interface Issue {
   lastLinkedAt?: string;
   referenceCount?: number;
   confidenceScore?: number;
+}
+
+export interface SystemAffected {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
 }

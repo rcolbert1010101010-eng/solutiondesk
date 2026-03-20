@@ -26,6 +26,12 @@ import { ConfidenceBadge } from '../components/ConfidenceBadge';
 import { RichTextEditor, SanitizedHtmlContent } from '../components/RichTextEditor';
 import { formatDate, formatRelativeTime } from '../lib/utils';
 import { createTag, getTagByName, listTags, normalizeTagName, TAGS_CHANGED_EVENT } from '../lib/tags';
+import {
+  createSystemAffected,
+  listSystemsAffected,
+  normalizeSystemAffectedName,
+  SYSTEMS_AFFECTED_CHANGED_EVENT,
+} from '../lib/systemsAffected';
 import { getIssueDescriptionHtml, getIssueDescriptionText, plainTextToHtml } from '../lib/richText';
 import {
   ArrowLeft,
@@ -241,9 +247,13 @@ export const IssueDetail: React.FC = () => {
   const [sourceRelationship, setSourceRelationship] = useState<IssueRelationship | undefined>();
   const [allIssues, setAllIssues] = useState<Issue[]>([]);
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
+  const [availableSystems, setAvailableSystems] = useState<{ id: string; name: string }[]>([]);
   const [quickTagInput, setQuickTagInput] = useState('');
   const [quickTagMessage, setQuickTagMessage] = useState('');
   const [quickTagMessageTone, setQuickTagMessageTone] = useState<'info' | 'success' | 'error'>('info');
+  const [quickSystemInput, setQuickSystemInput] = useState('');
+  const [quickSystemMessage, setQuickSystemMessage] = useState('');
+  const [quickSystemMessageTone, setQuickSystemMessageTone] = useState<'info' | 'success' | 'error'>('info');
   const [linkSearch, setLinkSearch] = useState('');
   const [selectedLinkTarget, setSelectedLinkTarget] = useState<string>('');
   const [selectedRelType, setSelectedRelType] = useState<RelationshipType>('duplicate');
@@ -301,6 +311,7 @@ export const IssueDetail: React.FC = () => {
       await loadIssue();
       setAllIssues(await getAllIssues());
       setAvailableTags(await listTags());
+      setAvailableSystems(await listSystemsAffected());
     };
 
     void loadPageData();
@@ -323,15 +334,26 @@ export const IssueDetail: React.FC = () => {
         };
       });
     };
+    const refreshSystems = async () => {
+      const systems = await listSystemsAffected();
+      const availableNames = new Set(systems.map(system => system.name));
+      setAvailableSystems(systems);
+      setEditForm(prev => ({
+        ...prev,
+        systemAffected: availableNames.has(prev.systemAffected) ? prev.systemAffected : ''
+      }));
+    };
     const refreshIssue = async () => {
       await loadIssue();
       setAllIssues(await getAllIssues());
     };
     window.addEventListener(ISSUES_CHANGED_EVENT, refreshIssue);
     window.addEventListener(TAGS_CHANGED_EVENT, refreshTags);
+    window.addEventListener(SYSTEMS_AFFECTED_CHANGED_EVENT, refreshSystems);
     return () => {
       window.removeEventListener(ISSUES_CHANGED_EVENT, refreshIssue);
       window.removeEventListener(TAGS_CHANGED_EVENT, refreshTags);
+      window.removeEventListener(SYSTEMS_AFFECTED_CHANGED_EVENT, refreshSystems);
     };
   }, []);
 
@@ -554,6 +576,10 @@ export const IssueDetail: React.FC = () => {
   const duplicateQuickTag = quickTagNormalized
     ? availableTags.find(tag => normalizeTagName(tag.name) === quickTagNormalized)
     : undefined;
+  const quickSystemNormalized = normalizeSystemAffectedName(quickSystemInput);
+  const duplicateQuickSystem = quickSystemNormalized
+    ? availableSystems.find(system => normalizeSystemAffectedName(system.name) === quickSystemNormalized)
+    : undefined;
 
   const handleQuickAddTag = async () => {
     if (!quickTagNormalized) return;
@@ -583,6 +609,29 @@ export const IssueDetail: React.FC = () => {
       }
       setQuickTagMessage(err instanceof Error ? err.message : 'Unable to add tag.');
       setQuickTagMessageTone('error');
+    }
+  };
+
+  const handleQuickAddSystem = async () => {
+    if (!quickSystemNormalized) return;
+
+    if (duplicateQuickSystem) {
+      setEditForm(prev => ({ ...prev, systemAffected: duplicateQuickSystem.name }));
+      setQuickSystemMessage('System already exists - selected it.');
+      setQuickSystemMessageTone('info');
+      return;
+    }
+
+    try {
+      const created = await createSystemAffected(quickSystemInput);
+      setAvailableSystems(await listSystemsAffected());
+      setEditForm(prev => ({ ...prev, systemAffected: created.name }));
+      setQuickSystemInput('');
+      setQuickSystemMessage('System added and selected.');
+      setQuickSystemMessageTone('success');
+    } catch (err) {
+      setQuickSystemMessage(err instanceof Error ? err.message : 'Unable to add system.');
+      setQuickSystemMessageTone('error');
     }
   };
 
@@ -728,17 +777,11 @@ export const IssueDetail: React.FC = () => {
           </div>
 
           {/* Meta */}
-          <div className={`flex flex-wrap gap-4 text-xs mb-4 text-slate-500 dark:text-zinc-500`}>
-            <span className="flex items-center gap-1.5">
-              <Monitor size={12} />
-              {editing ? (
-                <input
-                  className={`border rounded px-2 py-0.5 focus:outline-none focus:border-amber-500 bg-white border-slate-200 text-slate-700 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300`}
-                  value={editForm.systemAffected}
-                  onChange={e => setEditForm(p => ({ ...p, systemAffected: e.target.value }))}
-                />
-              ) : issue.systemAffected}
-            </span>
+            <div className={`flex flex-wrap gap-4 text-xs mb-4 text-slate-500 dark:text-zinc-500`}>
+              <span className="flex items-center gap-1.5">
+                <Monitor size={12} />
+                {editing ? editForm.systemAffected || 'Select a system' : issue.systemAffected}
+              </span>
             <span className="flex items-center gap-1.5">
               <Calendar size={12} />
               {formatDate(issue.createdAt)}
@@ -759,9 +802,69 @@ export const IssueDetail: React.FC = () => {
                 ) : issue.assignee}
               </span>
             )}
-          </div>
+            </div>
 
-          {/* Status */}
+            {editing && (
+              <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-zinc-800 dark:bg-zinc-800/40">
+                <p className="text-xs mb-2 text-slate-500 dark:text-zinc-500">System Affected</p>
+                <div className="space-y-2">
+                  <select
+                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-500 bg-white border-slate-200 text-slate-900 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-100"
+                    value={editForm.systemAffected}
+                    onChange={e => setEditForm(p => ({ ...p, systemAffected: e.target.value }))}
+                  >
+                    <option value="">Select a system...</option>
+                    {availableSystems.map(system => (
+                      <option key={system.id} value={system.name}>{system.name}</option>
+                    ))}
+                  </select>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={quickSystemInput}
+                      onChange={e => {
+                        setQuickSystemInput(e.target.value);
+                        setQuickSystemMessage('');
+                      }}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleQuickAddSystem();
+                        }
+                      }}
+                      placeholder="Quick add system..."
+                      className="flex-1 border rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 bg-white border-slate-200 text-slate-900 placeholder-slate-400 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-100 dark:placeholder-zinc-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleQuickAddSystem}
+                      disabled={!quickSystemNormalized}
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-400 text-zinc-900 hover:bg-amber-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Add
+                    </button>
+                  </div>
+                  {quickSystemMessage && (
+                    <p className={`text-xs ${
+                      quickSystemMessageTone === 'error'
+                        ? 'text-red-500'
+                        : quickSystemMessageTone === 'success'
+                          ? 'text-emerald-500'
+                          : 'text-amber-500'
+                    }`}>
+                      {quickSystemMessage}
+                    </p>
+                  )}
+                  {!quickSystemMessage && duplicateQuickSystem && (
+                    <p className="text-xs text-amber-500">
+                      System already exists. Click Add to select it.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Status */}
           <div className="flex items-center gap-3 mb-4">
             {editing ? (
               <select

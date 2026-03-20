@@ -51,6 +51,7 @@ alter table public.issues
 create table if not exists public.resolutions (
   id uuid primary key default gen_random_uuid(),
   issue_id uuid null references public.issues(id) on delete cascade,
+  legacy_id text null,
   title text not null,
   steps jsonb not null default '[]'::jsonb,
   notes text null,
@@ -59,13 +60,17 @@ create table if not exists public.resolutions (
   updated_at timestamptz not null default now()
 );
 
+alter table public.resolutions add column if not exists legacy_id text;
+
 alter table public.resolutions
   alter column tags set default '{}'::uuid[];
 
 create index if not exists issues_master_incident_id_idx on public.issues (master_incident_id);
 create index if not exists issues_updated_at_idx on public.issues (updated_at desc);
+create unique index if not exists issues_legacy_id_idx on public.issues (legacy_id) where legacy_id is not null;
 create index if not exists resolutions_issue_id_idx on public.resolutions (issue_id);
 create index if not exists resolutions_updated_at_idx on public.resolutions (updated_at desc);
+create unique index if not exists resolutions_legacy_id_idx on public.resolutions (legacy_id) where legacy_id is not null;
 
 drop trigger if exists trg_tags_set_updated_at on public.tags;
 create trigger trg_tags_set_updated_at

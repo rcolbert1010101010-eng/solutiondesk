@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { BookOpen, Pencil, Plus, Save, Search, Trash2, X } from 'lucide-react';
 import { RichTextEditor, SanitizedHtmlContent } from '../components/RichTextEditor';
 import { TagBadge } from '../components/TagBadge';
@@ -98,6 +99,7 @@ export const ResolutionLibrary: React.FC = () => {
         resolution.title ?? '',
         resolution.summary ?? '',
         resolution.notesText ?? '',
+        resolution.sourceIssueTitle ?? '',
         ...normalizeStepLines(resolution.steps),
         ...(resolution.tags ?? []),
       ].join(' ').toLowerCase();
@@ -204,7 +206,7 @@ export const ResolutionLibrary: React.FC = () => {
               </div>
               <h1 className="text-2xl font-bold text-slate-900 dark:text-zinc-100">Resolution Library</h1>
             </div>
-            <p className="text-sm mt-1 text-slate-500 dark:text-zinc-500">Shared global resolutions stored in Supabase for every signed-in device.</p>
+            <p className="text-sm mt-1 text-slate-500 dark:text-zinc-500">Shared global resolutions available on every signed-in device.</p>
           </div>
           <button
             onClick={startCreate}
@@ -218,15 +220,15 @@ export const ResolutionLibrary: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <div className="border rounded-xl p-4 bg-white border-slate-200 dark:bg-zinc-900 dark:border-zinc-800">
             <div className="text-2xl font-bold text-slate-900 dark:text-zinc-100">{resolutions.length}</div>
-            <div className="text-xs mt-1 text-slate-500 dark:text-zinc-500">Library Items</div>
+            <div className="text-xs mt-1 text-slate-500 dark:text-zinc-500">All Resolution Entries</div>
           </div>
           <div className="border rounded-xl p-4 bg-white border-slate-200 dark:bg-zinc-900 dark:border-zinc-800">
-            <div className="text-2xl font-bold text-violet-400">{resolutions.filter(item => (item.tags ?? []).length > 0).length}</div>
-            <div className="text-xs mt-1 text-slate-500 dark:text-zinc-500">Tagged Resolutions</div>
+            <div className="text-2xl font-bold text-violet-400">{resolutions.filter(item => item.sourceType === 'library').length}</div>
+            <div className="text-xs mt-1 text-slate-500 dark:text-zinc-500">Library Resolutions</div>
           </div>
           <div className="border rounded-xl p-4 bg-white border-slate-200 dark:bg-zinc-900 dark:border-zinc-800">
-            <div className="text-2xl font-bold text-emerald-400">{resolutions.filter(item => normalizeStepLines(item.steps).length >= 3).length}</div>
-            <div className="text-xs mt-1 text-slate-500 dark:text-zinc-500">Detailed Playbooks</div>
+            <div className="text-2xl font-bold text-emerald-400">{resolutions.filter(item => item.sourceType === 'issue').length}</div>
+            <div className="text-xs mt-1 text-slate-500 dark:text-zinc-500">From Issue</div>
           </div>
         </div>
 
@@ -341,12 +343,13 @@ export const ResolutionLibrary: React.FC = () => {
           {filteredResolutions.length === 0 ? (
             <div className="text-center py-16 border rounded-xl bg-white border-slate-200 dark:bg-zinc-900 dark:border-zinc-800">
               <BookOpen size={32} className="mx-auto mb-4 text-slate-300 dark:text-zinc-700" />
-              <p className="text-sm text-slate-500 dark:text-zinc-500">No library resolutions found.</p>
-              <p className="text-xs mt-1 text-slate-400 dark:text-zinc-600">Create one and it will be shared across devices.</p>
+              <p className="text-sm text-slate-500 dark:text-zinc-500">No resolutions found.</p>
+              <p className="text-xs mt-1 text-slate-400 dark:text-zinc-600">Create a library item or add a resolution to an issue.</p>
             </div>
           ) : (
             filteredResolutions.map(resolution => {
               const steps = normalizeStepLines(resolution.steps);
+              const isLibraryResolution = resolution.sourceType !== 'issue';
               return (
                 <div
                   key={resolution.id}
@@ -354,6 +357,23 @@ export const ResolutionLibrary: React.FC = () => {
                 >
                   <div className="flex items-start justify-between gap-3 mb-3">
                     <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+                          isLibraryResolution
+                            ? 'border-violet-500/30 bg-violet-500/10 text-violet-400'
+                            : 'border-blue-500/30 bg-blue-500/10 text-blue-400'
+                        }`}>
+                          {isLibraryResolution ? 'Library' : 'From Issue'}
+                        </span>
+                        {!isLibraryResolution && resolution.sourceIssueId && (
+                          <Link
+                            to={`/issues/${resolution.sourceIssueId}`}
+                            className="text-xs text-blue-500 hover:text-blue-400 hover:underline"
+                          >
+                            {resolution.sourceIssueTitle ?? 'View source issue'}
+                          </Link>
+                        )}
+                      </div>
                       <h3 className="text-sm font-semibold text-slate-900 dark:text-zinc-100">
                         {resolution.title ?? resolution.summary ?? 'Resolution'}
                       </h3>
@@ -362,19 +382,23 @@ export const ResolutionLibrary: React.FC = () => {
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => startEdit(resolution)}
-                        className="text-xs px-2 py-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
-                      >
-                        <span className="inline-flex items-center gap-1"><Pencil size={11} /> Edit</span>
-                      </button>
-                      {resolution.id && (
-                        <button
-                          onClick={() => handleDelete(resolution.id as string)}
-                          className="text-xs px-2 py-1 rounded border border-red-500/30 bg-red-500/10 text-red-500 hover:bg-red-500/20"
-                        >
-                          <span className="inline-flex items-center gap-1"><Trash2 size={11} /> Delete</span>
-                        </button>
+                      {isLibraryResolution && (
+                        <>
+                          <button
+                            onClick={() => startEdit(resolution)}
+                            className="text-xs px-2 py-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+                          >
+                            <span className="inline-flex items-center gap-1"><Pencil size={11} /> Edit</span>
+                          </button>
+                          {resolution.id && (
+                            <button
+                              onClick={() => handleDelete(resolution.id as string)}
+                              className="text-xs px-2 py-1 rounded border border-red-500/30 bg-red-500/10 text-red-500 hover:bg-red-500/20"
+                            >
+                              <span className="inline-flex items-center gap-1"><Trash2 size={11} /> Delete</span>
+                            </button>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>

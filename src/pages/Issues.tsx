@@ -87,7 +87,6 @@ export const Issues: React.FC = () => {
         issue.title.toLowerCase().includes(search.toLowerCase()) ||
         descriptionText.includes(search.toLowerCase()) ||
         issue.systemAffected.toLowerCase().includes(search.toLowerCase()) ||
-        issue.id.toLowerCase().includes(search.toLowerCase()) ||
         (issue.tags && issue.tags.some(t => t.toLowerCase().includes(search.toLowerCase())));
       const matchesStatus = statusFilter === 'All' || issue.status === statusFilter;
       const matchesSeverity = severityFilter === 'All' || issue.severity === severityFilter;
@@ -159,7 +158,7 @@ export const Issues: React.FC = () => {
                 placeholder={
                   searchMode === 'semantic'
                     ? 'Describe the problem to find semantically similar issues...'
-                    : 'Search by title, description, system, ID, or tag...'
+                    : 'Search by title, description, system, or tag...'
                 }
                 className={`w-full border rounded-lg pl-9 pr-9 py-2 text-sm focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 bg-white border-slate-200 text-slate-900 placeholder-slate-400 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-100 dark:placeholder-zinc-500`}
               />
