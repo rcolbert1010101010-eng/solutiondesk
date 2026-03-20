@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { getAllIssues } from '../lib/db';
+import { getAllIssues, ISSUES_CHANGED_EVENT } from '../lib/db';
 import { semanticSearch, SemanticMatch } from '../lib/semanticSearch';
 import { SemanticMatchCard } from './SemanticMatchCard';
 import { Search, X, Loader2, Lightbulb } from 'lucide-react';
@@ -37,7 +37,10 @@ export const SemanticSearchPanel: React.FC<SemanticSearchPanelProps> = ({
   const effectiveQuery = externalQuery !== undefined ? externalQuery : internalQuery;
 
   useEffect(() => {
-    setAllIssues(getAllIssues());
+    const loadIssues = async () => setAllIssues(await getAllIssues());
+    void loadIssues();
+    window.addEventListener(ISSUES_CHANGED_EVENT, loadIssues);
+    return () => window.removeEventListener(ISSUES_CHANGED_EVENT, loadIssues);
   }, []);
 
   useEffect(() => {

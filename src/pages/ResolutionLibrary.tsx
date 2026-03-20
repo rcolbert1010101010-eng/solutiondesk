@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getAllIssues } from '../lib/db';
+import { getAllIssues, ISSUES_CHANGED_EVENT } from '../lib/db';
 import { Issue } from '../types';
 import { ConfidenceBadge } from '../components/ConfidenceBadge';
 import { SeverityBadge } from '../components/SeverityBadge';
@@ -30,7 +30,10 @@ export const ResolutionLibrary: React.FC = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    setIssues(getAllIssues());
+    const loadIssues = async () => setIssues(await getAllIssues());
+    void loadIssues();
+    window.addEventListener(ISSUES_CHANGED_EVENT, loadIssues);
+    return () => window.removeEventListener(ISSUES_CHANGED_EVENT, loadIssues);
   }, []);
 
   const resolvedIssues = issues.filter(i => i.status === 'Resolved' || i.status === 'Closed');

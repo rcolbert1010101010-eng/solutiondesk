@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getAllIssues } from '../lib/db';
+import { getAllIssues, ISSUES_CHANGED_EVENT } from '../lib/db';
 import { Issue, Status, Severity, TagReference, Tag } from '../types';
 import { IssueTable } from '../components/IssueTable';
 import { IssueCard } from '../components/IssueCard';
@@ -30,11 +30,19 @@ export const Issues: React.FC = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    setIssues(getAllIssues());
-    const refreshTags = () => setAvailableTags(listTags());
-    refreshTags();
+    const loadIssues = async () => setIssues(await getAllIssues());
+    const refreshTags = async () => setAvailableTags(await listTags());
+
+    void loadIssues();
+    void refreshTags();
+
+    window.addEventListener(ISSUES_CHANGED_EVENT, loadIssues);
     window.addEventListener(TAGS_CHANGED_EVENT, refreshTags);
-    return () => window.removeEventListener(TAGS_CHANGED_EVENT, refreshTags);
+
+    return () => {
+      window.removeEventListener(ISSUES_CHANGED_EVENT, loadIssues);
+      window.removeEventListener(TAGS_CHANGED_EVENT, refreshTags);
+    };
   }, []);
 
   useEffect(() => {

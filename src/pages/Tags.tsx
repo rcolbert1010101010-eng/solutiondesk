@@ -15,10 +15,10 @@ export const Tags: React.FC = () => {
   const [editColor, setEditColor] = useState('#3B82F6');
   const [useEditColor, setUseEditColor] = useState(false);
 
-  const refreshTags = () => setTags(listTags());
+  const refreshTags = async () => setTags(await listTags());
 
   useEffect(() => {
-    refreshTags();
+    void refreshTags();
     window.addEventListener(TAGS_CHANGED_EVENT, refreshTags);
     return () => window.removeEventListener(TAGS_CHANGED_EVENT, refreshTags);
   }, []);
@@ -44,47 +44,47 @@ export const Tags: React.FC = () => {
     setUseEditColor(false);
   };
 
-  const handleCreate = (event: React.FormEvent) => {
+  const handleCreate = async (event: React.FormEvent) => {
     event.preventDefault();
     setError('');
     try {
-      createTag({
+      await createTag({
         name: newName,
         color: useNewColor ? newColor : undefined,
       });
       resetCreateForm();
-      refreshTags();
+      await refreshTags();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to create tag.');
     }
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (!editingId) return;
     setError('');
     try {
-      updateTag(editingId, {
+      await updateTag(editingId, {
         name: editName,
         color: useEditColor ? editColor : undefined,
       });
       cancelEditing();
-      refreshTags();
+      await refreshTags();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to update tag.');
     }
   };
 
-  const handleDelete = (tag: Tag) => {
+  const handleDelete = async (tag: Tag) => {
     setError('');
     if (!window.confirm(`Delete tag "${tag.name}"? This will remove it from all issues.`)) {
       return;
     }
     try {
-      deleteTag(tag.id);
+      await deleteTag(tag.id);
       if (editingId === tag.id) {
         cancelEditing();
       }
-      refreshTags();
+      await refreshTags();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to delete tag.');
     }
@@ -96,7 +96,7 @@ export const Tags: React.FC = () => {
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-slate-900 dark:text-zinc-100">Tags</h1>
           <p className="text-sm mt-1 text-slate-500 dark:text-zinc-500">
-            Manage reusable issue tags. Changes persist to local storage.
+            Manage reusable issue tags. Changes sync through Supabase for all signed-in users.
           </p>
         </div>
 

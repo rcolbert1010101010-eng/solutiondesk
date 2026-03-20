@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { getTagByName, TAGS_CHANGED_EVENT } from '../lib/tags';
 
@@ -45,6 +45,7 @@ export const TagBadge: React.FC<TagBadgeProps> = ({
   onRemove
 }) => {
   const [refreshToken, setRefreshToken] = useState(0);
+  const [tagRecord, setTagRecord] = useState<Awaited<ReturnType<typeof getTagByName>>>();
 
   useEffect(() => {
     const onTagsChanged = () => setRefreshToken(value => value + 1);
@@ -52,7 +53,21 @@ export const TagBadge: React.FC<TagBadgeProps> = ({
     return () => window.removeEventListener(TAGS_CHANGED_EVENT, onTagsChanged);
   }, []);
 
-  const tagRecord = useMemo(() => getTagByName(tag), [tag, refreshToken]);
+  useEffect(() => {
+    let active = true;
+
+    const loadTag = async () => {
+      const nextTag = await getTagByName(tag);
+      if (active) setTagRecord(nextTag);
+    };
+
+    void loadTag();
+
+    return () => {
+      active = false;
+    };
+  }, [tag, refreshToken]);
+
   const resolvedLabel = label ?? tagRecord?.name ?? tag;
   const resolvedColor = color ?? tagRecord?.color ?? fallbackColorFromTag(resolvedLabel);
 

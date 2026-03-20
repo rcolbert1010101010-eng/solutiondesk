@@ -15,7 +15,8 @@ import {
   getRelationshipForSource,
   getAllIssues,
   calculateConfidenceScore,
-  incrementReferenceCount
+  incrementReferenceCount,
+  ISSUES_CHANGED_EVENT
 } from '../lib/db';
 import { Issue, Resolution, Status, Severity, TagReference, RelationshipType, IssueRelationship, Tag } from '../types';
 import { StatusBadge } from '../components/StatusBadge';
@@ -272,9 +273,9 @@ export const IssueDetail: React.FC = () => {
     notesText: ''
   });
 
-  const loadIssue = () => {
+  const loadIssue = async () => {
     if (!id) return;
-    const found = getIssueById(id);
+    const found = await getIssueById(id);
     if (!found) { navigate('/issues'); return; }
     setIssue(found);
     setEditForm({
@@ -288,21 +289,25 @@ export const IssueDetail: React.FC = () => {
       tags: found.tags ?? []
     });
     if (found.isMasterIncident) {
-      setLinkedRelationships(getRelationshipsForMaster(found.id));
+      setLinkedRelationships(await getRelationshipsForMaster(found.id));
     }
-    const srcRel = getRelationshipForSource(found.id);
+    const srcRel = await getRelationshipForSource(found.id);
     setSourceRelationship(srcRel);
   };
 
   useEffect(() => {
-    loadIssue();
-    setAllIssues(getAllIssues());
-    setAvailableTags(listTags());
+    const loadPageData = async () => {
+      await loadIssue();
+      setAllIssues(await getAllIssues());
+      setAvailableTags(await listTags());
+    };
+
+    void loadPageData();
   }, [id]);
 
   useEffect(() => {
-    const refreshTags = () => {
-      const tags = listTags();
+    const refreshTags = async () => {
+      const tags = await listTags();
       const availableNames = new Set(tags.map(tag => tag.name));
       setAvailableTags(tags);
       setEditForm(prev => ({
@@ -317,8 +322,16 @@ export const IssueDetail: React.FC = () => {
         };
       });
     };
+    const refreshIssue = async () => {
+      await loadIssue();
+      setAllIssues(await getAllIssues());
+    };
+    window.addEventListener(ISSUES_CHANGED_EVENT, refreshIssue);
     window.addEventListener(TAGS_CHANGED_EVENT, refreshTags);
-    return () => window.removeEventListener(TAGS_CHANGED_EVENT, refreshTags);
+    return () => {
+      window.removeEventListener(ISSUES_CHANGED_EVENT, refreshIssue);
+      window.removeEventListener(TAGS_CHANGED_EVENT, refreshTags);
+    };
   }, []);
 
   if (!issue) {
@@ -329,9 +342,9 @@ export const IssueDetail: React.FC = () => {
     );
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!id) return;
-    updateIssue(id, {
+    await updateIssue(id, {
       title: editForm.title,
       description: editForm.descriptionText,
       descriptionText: editForm.descriptionText,
@@ -345,36 +358,36 @@ export const IssueDetail: React.FC = () => {
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 2000);
     setEditing(false);
-    loadIssue();
+    await loadIssue();
   };
 
-  const handleInlineStatusChange = (nextStatus: Status) => {
+  const handleInlineStatusChange = async (nextStatus: Status) => {
     if (!id || !issue || nextStatus === issue.status) return;
     setInlineStatusSaving(true);
-    const updated = updateIssue(id, { status: nextStatus });
+    const updated = await updateIssue(id, { status: nextStatus });
     if (updated) {
       setIssue(updated);
       setEditForm(prev => ({ ...prev, status: nextStatus }));
-      setAllIssues(getAllIssues());
+      setAllIssues(await getAllIssues());
       setInlineStatusSaved(true);
       setTimeout(() => setInlineStatusSaved(false), 1200);
     }
     setInlineStatusSaving(false);
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!id) return;
-    deleteIssue(id);
+    await deleteIssue(id);
     navigate('/issues');
   };
 
-  const handleAddResolution = () => {
+  const handleAddResolution = async () => {
     const steps = stepsHtmlToLines(resolutionForm.stepsHtml);
     if (!id || steps.length === 0) return;
     const notesText = resolutionForm.notesText.trim();
     const notesHtml = resolutionForm.notesHtml.trim();
     const stepsHtml = resolutionForm.stepsHtml.trim();
-    addResolution(id, {
+    await addResolution(id, {
       stepsHtml,
       steps,
       notes: notesText ? notesHtml : undefined,
@@ -382,7 +395,7 @@ export const IssueDetail: React.FC = () => {
     });
     setResolutionForm({ stepsHtml: '<p></p>', notesHtml: '<p></p>', notesText: '' });
     setShowResolutionForm(false);
-    loadIssue();
+    await loadIssue();
   };
 
   const startResolutionEdit = (resolution: Resolution) => {
@@ -405,14 +418,14 @@ export const IssueDetail: React.FC = () => {
     });
   };
 
-  const handleSaveResolutionEdit = () => {
+  const handleSaveResolutionEdit = async () => {
     if (!id || !editingResolutionId) return;
     const steps = stepsHtmlToLines(resolutionEditForm.stepsHtml);
     if (steps.length === 0) return;
 
     const notesText = resolutionEditForm.notesText.trim();
     const notesHtml = resolutionEditForm.notesHtml.trim();
-    const updated = updateResolution(id, editingResolutionId, {
+    const updated = await updateResolution(id, editingResolutionId, {
       stepsHtml: resolutionEditForm.stepsHtml.trim(),
       steps,
       notes: notesText ? notesHtml : undefined,
@@ -421,50 +434,50 @@ export const IssueDetail: React.FC = () => {
 
     if (!updated) return;
     setIssue(updated);
-    setAllIssues(getAllIssues());
+    setAllIssues(await getAllIssues());
     cancelResolutionEdit();
   };
 
-  const handleDeleteResolution = (resolutionId: string) => {
+  const handleDeleteResolution = async (resolutionId: string) => {
     if (!id) return;
     const confirmed = window.confirm('Delete this resolution?');
     if (!confirmed) return;
 
-    const updated = deleteResolution(id, resolutionId);
+    const updated = await deleteResolution(id, resolutionId);
     if (!updated) return;
     setIssue(updated);
-    setAllIssues(getAllIssues());
+    setAllIssues(await getAllIssues());
 
     if (editingResolutionId === resolutionId) {
       cancelResolutionEdit();
     }
   };
 
-  const handlePromote = () => {
+  const handlePromote = async () => {
     if (!id) return;
-    promoteToMasterIncident(id);
-    loadIssue();
+    await promoteToMasterIncident(id);
+    await loadIssue();
   };
 
-  const handleDemote = () => {
+  const handleDemote = async () => {
     if (!id) return;
-    demoteMasterIncident(id);
-    loadIssue();
+    await demoteMasterIncident(id);
+    await loadIssue();
   };
 
-  const handleLink = () => {
+  const handleLink = async () => {
     if (!id || !selectedLinkTarget) return;
-    linkIssueToMaster(id, selectedLinkTarget, selectedRelType);
+    await linkIssueToMaster(id, selectedLinkTarget, selectedRelType);
     setShowLinkModal(false);
     setSelectedLinkTarget('');
     setLinkSearch('');
-    loadIssue();
+    await loadIssue();
   };
 
-  const handleUnlink = () => {
+  const handleUnlink = async () => {
     if (!id) return;
-    unlinkIssue(id);
-    loadIssue();
+    await unlinkIssue(id);
+    await loadIssue();
   };
 
   const handleCopyLink = () => {
@@ -485,10 +498,10 @@ export const IssueDetail: React.FC = () => {
     });
   };
 
-  const handleIncrementReference = (resolutionId: string) => {
+  const handleIncrementReference = async (resolutionId: string) => {
     if (!id) return;
-    incrementReferenceCount(id, resolutionId);
-    loadIssue();
+    await incrementReferenceCount(id, resolutionId);
+    await loadIssue();
   };
 
   const toggleTag = (tag: TagReference) => {
@@ -512,7 +525,7 @@ export const IssueDetail: React.FC = () => {
     ? availableTags.find(tag => normalizeTagName(tag.name) === quickTagNormalized)
     : undefined;
 
-  const handleQuickAddTag = () => {
+  const handleQuickAddTag = async () => {
     if (!quickTagNormalized) return;
 
     if (duplicateQuickTag) {
@@ -523,19 +536,19 @@ export const IssueDetail: React.FC = () => {
     }
 
     try {
-      const created = createTag({ name: quickTagInput });
-      setAvailableTags(listTags());
+      const created = await createTag({ name: quickTagInput });
+      setAvailableTags(await listTags());
       selectTag(created.name);
       setQuickTagInput('');
       setQuickTagMessage('Tag added and selected.');
       setQuickTagMessageTone('success');
     } catch (err) {
-      const existing = getTagByName(quickTagInput);
+      const existing = await getTagByName(quickTagInput);
       if (existing) {
         selectTag(existing.name);
         setQuickTagMessage('Tag already exists - selected it.');
         setQuickTagMessageTone('info');
-        setAvailableTags(listTags());
+        setAvailableTags(await listTags());
         return;
       }
       setQuickTagMessage(err instanceof Error ? err.message : 'Unable to add tag.');

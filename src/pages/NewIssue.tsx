@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { addIssue, getAllIssues } from '../lib/db';
+import { addIssue, getAllIssues, ISSUES_CHANGED_EVENT } from '../lib/db';
 import { Severity, TagReference, Issue, Tag } from '../types';
 import { TagBadge } from '../components/TagBadge';
 import { RichTextEditor } from '../components/RichTextEditor';
@@ -46,13 +46,18 @@ export const NewIssue: React.FC = () => {
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [selectedSuggestionId, setSelectedSuggestionId] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const refreshTags = () => setAvailableTags(listTags());
+  const refreshTags = async () => setAvailableTags(await listTags());
 
   useEffect(() => {
-    setAllIssues(getAllIssues());
-    refreshTags();
+    const loadIssues = async () => setAllIssues(await getAllIssues());
+    void loadIssues();
+    void refreshTags();
+    window.addEventListener(ISSUES_CHANGED_EVENT, loadIssues);
     window.addEventListener(TAGS_CHANGED_EVENT, refreshTags);
-    return () => window.removeEventListener(TAGS_CHANGED_EVENT, refreshTags);
+    return () => {
+      window.removeEventListener(ISSUES_CHANGED_EVENT, loadIssues);
+      window.removeEventListener(TAGS_CHANGED_EVENT, refreshTags);
+    };
   }, []);
 
   useEffect(() => {
@@ -100,7 +105,7 @@ export const NewIssue: React.FC = () => {
     setSelectedTags(prev => (prev.includes(tagName) ? prev : [...prev, tagName]));
   };
 
-  const handleQuickAddTag = () => {
+  const handleQuickAddTag = async () => {
     if (!quickTagNormalized) return;
 
     if (duplicateQuickTag) {
@@ -111,19 +116,19 @@ export const NewIssue: React.FC = () => {
     }
 
     try {
-      const created = createTag({ name: quickTagInput });
-      refreshTags();
+      const created = await createTag({ name: quickTagInput });
+      await refreshTags();
       selectTag(created.name);
       setQuickTagInput('');
       setQuickTagMessage('Tag added and selected.');
       setQuickTagMessageTone('success');
     } catch (err) {
-      const existing = getTagByName(quickTagInput);
+      const existing = await getTagByName(quickTagInput);
       if (existing) {
         selectTag(existing.name);
         setQuickTagMessage('Tag already exists — selected it.');
         setQuickTagMessageTone('info');
-        refreshTags();
+        await refreshTags();
         return;
       }
       setQuickTagMessage(err instanceof Error ? err.message : 'Unable to add tag.');
@@ -140,12 +145,12 @@ export const NewIssue: React.FC = () => {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
     setSubmitting(true);
-    setTimeout(() => {
-      const newIssue = addIssue({
+    setTimeout(async () => {
+      const newIssue = await addIssue({
         title: title.trim(),
         description: descriptionText.trim(),
         descriptionText: descriptionText.trim(),

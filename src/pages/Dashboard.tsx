@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getAllIssues, getConfidenceLevel, rankIssues } from '../lib/db';
+import { getAllIssues, rankIssues, ISSUES_CHANGED_EVENT } from '../lib/db';
 import { Issue } from '../types';
 import { KPICard } from '../components/KPICard';
 import { StatusBadge } from '../components/StatusBadge';
@@ -26,7 +26,13 @@ export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    setIssues(getAllIssues());
+    const loadIssues = async () => {
+      setIssues(await getAllIssues());
+    };
+
+    void loadIssues();
+    window.addEventListener(ISSUES_CHANGED_EVENT, loadIssues);
+    return () => window.removeEventListener(ISSUES_CHANGED_EVENT, loadIssues);
   }, []);
 
   const open = issues.filter(i => i.status === 'Open').length;
