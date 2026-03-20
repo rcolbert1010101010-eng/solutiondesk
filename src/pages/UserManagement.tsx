@@ -18,24 +18,44 @@ type AdminUsersPayload =
 
 interface EdgeFunctionResponse {
   error?: string;
+  message?: string;
+  code?: number;
   ok?: boolean;
 }
 
-async function invokeAdminUsers<TResponse = EdgeFunctionResponse>(payload: AdminUsersPayload): Promise<{ success: boolean; data?: TResponse; error?: string }> {
+async function invokeAdminUsers<TResponse = EdgeFunctionResponse>(payload: AdminUsersPayload): Promise<TResponse> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const tokenLen = session?.access_token?.length ?? 0;
+
+  console.log("ADMIN_USERS_SESSION", {
+    hasSession: !!session,
+    tokenLen,
+  });
+
+  if (tokenLen === 0) {
+    throw new Error('No access token in session');
+  }
+
   const { data, error } = await supabase.functions.invoke<TResponse>('admin-users', {
     body: payload,
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+    },
   });
 
   if (error) {
-    return { success: false, error: error.message || 'Edge function call failed.' };
+    throw new Error(error.message || 'Edge function call failed.');
   }
 
   const maybeError = (data as EdgeFunctionResponse | null)?.error;
-  if (maybeError) {
-    return { success: false, error: maybeError };
+  const maybeMessage = (data as EdgeFunctionResponse | null)?.message;
+  if (maybeError || maybeMessage) {
+    throw new Error(maybeError || maybeMessage);
   }
 
-  return { success: true, data: data ?? undefined };
+  return data as TResponse;
 }
 
 export const UserManagement: React.FC = () => {
@@ -135,20 +155,22 @@ export const UserManagement: React.FC = () => {
 
     setCreatingUser(true);
 
-    const result = await invokeAdminUsers({
-      action: 'createUser',
-      email,
-      password,
-      displayName: displayName || undefined,
-      role: newRole,
-    });
-
-    setCreatingUser(false);
-
-    if (!result.success) {
-      setError(result.error || 'Failed to create user.');
+    try {
+      await invokeAdminUsers({
+        action: 'createUser',
+        email,
+        password,
+        displayName: displayName || undefined,
+        role: newRole,
+      });
+    } catch (invokeError) {
+      const message = invokeError instanceof Error ? invokeError.message : 'Failed to create user.';
+      setError(message);
+      setCreatingUser(false);
       return;
     }
+
+    setCreatingUser(false);
 
     setNewEmail('');
     setNewPassword('');
@@ -185,17 +207,19 @@ export const UserManagement: React.FC = () => {
 
     setDeletingUserId(deleteTarget.id);
 
-    const result = await invokeAdminUsers({
-      action: 'deleteUser',
-      userId: deleteTarget.id,
-    });
-
-    setDeletingUserId(null);
-
-    if (!result.success) {
-      setError(result.error || 'Failed to delete user.');
+    try {
+      await invokeAdminUsers({
+        action: 'deleteUser',
+        userId: deleteTarget.id,
+      });
+    } catch (invokeError) {
+      const message = invokeError instanceof Error ? invokeError.message : 'Failed to delete user.';
+      setError(message);
+      setDeletingUserId(null);
       return;
     }
+
+    setDeletingUserId(null);
 
     const deletedSelf = deleteTarget.id === currentUser?.id;
     setDeleteTarget(null);

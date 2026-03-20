@@ -1,4 +1,4 @@
-import { createClient } from 'npm:@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -6,24 +6,24 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-type UserRole = 'admin' | 'user';
+type Role = 'admin' | 'user';
 
-type CreateUserAction = {
+type CreateUserPayload = {
   action: 'createUser';
   email: string;
   password: string;
   displayName?: string;
-  role?: UserRole;
+  role?: Role;
 };
 
-type DeleteUserAction = {
+type DeleteUserPayload = {
   action: 'deleteUser';
   userId: string;
 };
 
-type ActionPayload = CreateUserAction | DeleteUserAction;
+type ActionPayload = CreateUserPayload | DeleteUserPayload;
 
-function json(body: unknown, status = 200): Response {
+function response(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: {
@@ -33,90 +33,129 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
+function errorResponse(status: number, code: string, message: string, details?: string): Response {
+  return response(
+    {
+      ok: false,
+      error: {
+        code,
+        message,
+        ...(details ? { details } : {}),
+      },
+    },
+    status,
+  );
+}
+
 Deno.serve(async req => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   if (req.method !== 'POST') {
-    return json({ ok: false, error: 'Method not allowed' }, 405);
+    return errorResponse(405, 'METHOD_NOT_ALLOWED', 'Method not allowed');
   }
 
-  const supabaseUrl = Deno.env.get('SUPABASE_URL');
-  const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
-  const supabaseServiceRoleKey = Deno.env.get('SERVICE_ROLE_KEY');
+  const url = Deno.env.get('FUNCTION_SUPABASE_URL');
+  const anonKey = Deno.env.get('FUNCTION_SUPABASE_ANON_KEY');
+  const serviceRoleKey = Deno.env.get('SERVICE_ROLE_KEY');
 
-  if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceRoleKey) {
-    return json({ ok: false, error: 'Missing required environment variables' }, 500);
+  if (!url || !anonKey || !serviceRoleKey) {
+    return errorResponse(
+      500,
+      'MISSING_ENV',
+      'Missing required function environment variables',
+      'Expected FUNCTION_SUPABASE_URL, FUNCTION_SUPABASE_ANON_KEY, SERVICE_ROLE_KEY',
+    );
   }
 
   const authHeader = req.headers.get('Authorization') ?? '';
   if (!authHeader.startsWith('Bearer ')) {
-    return json({ ok: false, error: 'Missing Authorization bearer token' }, 401);
+    return errorResponse(401, 'MISSING_AUTHORIZATION', 'Missing Authorization header');
   }
 
-  const jwt = authHeader.slice('Bearer '.length).trim();
-  if (!jwt) {
-    return json({ ok: false, error: 'Invalid Authorization token' }, 401);
+  const userClient = createClient(url, anonKey, {
+    global: {
+      headers: {
+        Authorization: authHeader,
+      },
+    },
+  });
+
+  const adminClient = createClient(url, serviceRoleKey);
+
+  const {
+    data: { user },
+    error: userError,
+  } = await userClient.auth.getUser();
+
+  if (userError || !user) {
+    const bearerPrefixOk = authHeader.startsWith('Bearer ');
+    const tokenLen = bearerPrefixOk ? authHeader.slice(7).length : 0;
+    return errorResponse(
+      401,
+      'INVALID_JWT',
+      'Invalid JWT',
+      JSON.stringify({
+        authHeaderPresent: !!authHeader,
+        bearerPrefixOk,
+        tokenLen,
+      }),
+    );
   }
 
-  const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey);
-  const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey);
-
-  const { data: authData, error: authError } = await supabaseAuth.auth.getUser(jwt);
-  if (authError || !authData.user) {
-    return json({ ok: false, error: authError?.message ?? 'Unauthorized' }, 401);
-  }
-
-  const callerId = authData.user.id;
-
-  const { data: callerProfile, error: callerProfileError } = await supabaseAdmin
+  const { data: callerProfile, error: callerProfileError } = await adminClient
     .from('profiles')
     .select('role')
-    .eq('id', callerId)
-    .maybeSingle();
+    .eq('id', user.id)
+    .single();
 
   if (callerProfileError) {
-    return json({ ok: false, error: callerProfileError.message }, 500);
+    return errorResponse(500, 'PROFILE_LOOKUP_FAILED', 'Failed to look up caller profile', callerProfileError.message);
   }
 
   if (!callerProfile || callerProfile.role !== 'admin') {
-    return json({ ok: false, error: 'Forbidden' }, 403);
+    return errorResponse(403, 'FORBIDDEN', 'Admin access required');
   }
 
   let payload: ActionPayload;
   try {
     payload = await req.json();
   } catch {
-    return json({ ok: false, error: 'Invalid JSON payload' }, 400);
+    return errorResponse(400, 'INVALID_JSON', 'Invalid JSON payload');
   }
 
   if (payload.action === 'createUser') {
     const email = payload.email?.trim().toLowerCase();
     const password = payload.password;
     const displayName = payload.displayName?.trim() || null;
-    const role: UserRole = payload.role === 'admin' ? 'admin' : 'user';
+    const role: Role = payload.role === 'admin' ? 'admin' : 'user';
 
-    if (!email) return json({ ok: false, error: 'Email is required' }, 400);
-    if (!password) return json({ ok: false, error: 'Password is required' }, 400);
+    if (!email) {
+      return errorResponse(400, 'MISSING_EMAIL', 'Email is required');
+    }
 
-    const { data: createdUserData, error: createUserError } = await supabaseAdmin.auth.admin.createUser({
+    if (!password) {
+      return errorResponse(400, 'MISSING_PASSWORD', 'Password is required');
+    }
+
+    const { data: created, error: createError } = await adminClient.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
     });
 
-    if (createUserError || !createdUserData.user) {
-      return json({ ok: false, error: createUserError?.message ?? 'Failed to create user' }, 400);
+    if (createError || !created.user) {
+      return errorResponse(400, 'CREATE_USER_FAILED', 'Failed to create user', createError?.message);
     }
 
-    const createdUserId = createdUserData.user.id;
+    const newUserId = created.user.id;
 
-    const { data: profile, error: profileError } = await supabaseAdmin
+    const { data: profile, error: profileError } = await adminClient
       .from('profiles')
       .upsert(
         {
-          id: createdUserId,
+          id: newUserId,
           email,
           display_name: displayName,
           role,
@@ -127,35 +166,36 @@ Deno.serve(async req => {
       .single();
 
     if (profileError) {
-      await supabaseAdmin.auth.admin.deleteUser(createdUserId);
-      return json({ ok: false, error: profileError.message }, 500);
+      await adminClient.auth.admin.deleteUser(newUserId);
+      return errorResponse(500, 'PROFILE_UPSERT_FAILED', 'Failed to create profile', profileError.message);
     }
 
-    return json({ ok: true, profile }, 200);
+    return response({ ok: true, profile }, 200);
   }
 
   if (payload.action === 'deleteUser') {
     const userId = payload.userId?.trim();
+
     if (!userId) {
-      return json({ ok: false, error: 'userId is required' }, 400);
+      return errorResponse(400, 'MISSING_USER_ID', 'userId is required');
     }
 
-    const { error: deleteUserError } = await supabaseAdmin.auth.admin.deleteUser(userId);
+    const { error: deleteUserError } = await adminClient.auth.admin.deleteUser(userId);
     if (deleteUserError) {
-      return json({ ok: false, error: deleteUserError.message }, 400);
+      return errorResponse(400, 'DELETE_USER_FAILED', 'Failed to delete auth user', deleteUserError.message);
     }
 
-    const { error: deleteProfileError } = await supabaseAdmin
+    const { error: deleteProfileError } = await adminClient
       .from('profiles')
       .delete()
       .eq('id', userId);
 
     if (deleteProfileError) {
-      return json({ ok: false, error: deleteProfileError.message }, 500);
+      return errorResponse(500, 'DELETE_PROFILE_FAILED', 'Failed to delete profile', deleteProfileError.message);
     }
 
-    return json({ ok: true }, 200);
+    return response({ ok: true }, 200);
   }
 
-  return json({ ok: false, error: 'Invalid action' }, 400);
+  return errorResponse(400, 'INVALID_ACTION', 'Unsupported action');
 });

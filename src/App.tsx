@@ -6,7 +6,6 @@ import { Issues } from './pages/Issues';
 import { NewIssue } from './pages/NewIssue';
 import { IssueDetail } from './pages/IssueDetail';
 import { ResolutionLibrary } from './pages/ResolutionLibrary';
-import { UserManagement } from './pages/UserManagement';
 import { LoginPage } from './pages/LoginPage';
 import { Tags } from './pages/Tags';
 import { ThemeProvider } from './context/ThemeContext';
@@ -22,7 +21,7 @@ const ProtectedApp: React.FC = () => {
           <div className="w-8 h-8 bg-amber-400 rounded-lg flex items-center justify-center animate-pulse">
             <span className="text-zinc-900 font-bold text-sm">I</span>
           </div>
-          <p className="text-sm text-slate-400 dark:text-zinc-500">Loading…</p>
+          <p className="text-sm text-slate-400 dark:text-zinc-500">Loading...</p>
         </div>
       </div>
     );
@@ -36,9 +35,6 @@ const ProtectedApp: React.FC = () => {
 };
 
 const AppShell: React.FC = () => {
-  const { currentUser } = useAuth();
-  const isAdmin = currentUser?.role === 'admin';
-
   return (
     <div className="flex min-h-screen bg-slate-100 dark:bg-[#0f0f10]">
       <Sidebar />
@@ -50,31 +46,10 @@ const AppShell: React.FC = () => {
           <Route path="/new-issue" element={<NewIssue />} />
           <Route path="/tags" element={<Tags />} />
           <Route path="/resolution-library" element={<ResolutionLibrary />} />
-          <Route
-            path="/admin/users"
-            element={
-              isAdmin
-                ? <UserManagement />
-                : <AccessDenied />
-            }
-          />
+          <Route path="/admin/users" element={<Navigate to="/" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
-    </div>
-  );
-};
-
-const AccessDenied: React.FC = () => {
-  return (
-    <div className="flex-1 flex flex-col items-center justify-center gap-4 p-8 text-slate-500 dark:text-zinc-400">
-      <div className="w-14 h-14 rounded-full flex items-center justify-center bg-slate-100 dark:bg-zinc-800">
-        <span className="text-2xl">🔒</span>
-      </div>
-      <h2 className="text-xl font-semibold text-slate-700 dark:text-zinc-200">Access Denied</h2>
-      <p className="text-sm text-center max-w-xs">
-        You don't have permission to access this page. Admin access is required.
-      </p>
     </div>
   );
 };

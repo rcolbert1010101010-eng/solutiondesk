@@ -11,7 +11,6 @@ import {
   BookOpen,
   Sun,
   Moon,
-  Users,
   LogOut,
   Shield
 } from 'lucide-react';
@@ -25,7 +24,6 @@ export const Sidebar: React.FC = () => {
   const { currentUser, signOut } = useAuth();
 
   const isDark = theme === 'dark';
-  const isAdmin = currentUser?.role === 'admin';
 
   const bg = isDark ? 'bg-zinc-900' : 'bg-white';
   const border = isDark ? 'border-zinc-800' : 'border-slate-200';
@@ -101,28 +99,6 @@ export const Sidebar: React.FC = () => {
           </NavLink>
         ))}
 
-        {/* Admin-only section */}
-        {isAdmin && (
-          <>
-            <p className={`text-xs font-semibold uppercase tracking-wider px-3 mt-4 mb-2 ${sectionLabel}`}>Admin</p>
-            <NavLink
-              to="/admin/users"
-              onClick={() => setMobileOpen(false)}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors group ${
-                  isActive ? navActive : `${navInactive} ${navHover}`
-                }`
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <Users size={16} className={isActive ? navIconActive : navIconInactive} />
-                  User Management
-                </>
-              )}
-            </NavLink>
-          </>
-        )}
       </nav>
 
       {/* Bottom: user info + theme toggle + logout */}

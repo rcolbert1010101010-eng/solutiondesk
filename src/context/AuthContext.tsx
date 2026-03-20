@@ -50,7 +50,7 @@ interface AuthContextValue extends AuthState {
   refreshCurrentUser: () => Promise<void>;
 }
 
-const SEEDED_ADMIN_EMAIL = 'randy.colbert@illinois.gov';
+const SHARED_ADMIN_EMAIL = 'iema.user@illinois.gov';
 
 function normalizeEmail(email: string | null | undefined): string {
   return email?.trim().toLowerCase() ?? '';
@@ -60,8 +60,8 @@ function normalizeRole(role: string | null | undefined): Role {
   return role === 'admin' ? 'admin' : 'user';
 }
 
-function fallbackRoleForEmail(email: string): Role {
-  return normalizeEmail(email) === SEEDED_ADMIN_EMAIL ? 'admin' : 'user';
+function adminRoleForEmail(email: string): Role {
+  return normalizeEmail(email) === SHARED_ADMIN_EMAIL ? 'admin' : 'user';
 }
 
 function getDisplayNameFromAuthUser(user: User): string | null {
@@ -73,21 +73,23 @@ function getDisplayNameFromAuthUser(user: User): string | null {
 }
 
 function toProfile(row: ProfileRow): Profile {
+  const email = normalizeEmail(row.email);
   return {
     id: row.id,
-    email: normalizeEmail(row.email),
+    email,
     displayName: row.display_name,
-    role: normalizeRole(row.role),
+    role: adminRoleForEmail(email),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
 }
 
 function toAppUser(profile: Profile): AppUser {
+  const email = normalizeEmail(profile.email);
   return {
     id: profile.id,
-    email: profile.email,
-    role: profile.role,
+    email,
+    role: adminRoleForEmail(email),
     displayName: profile.displayName,
   };
 }
@@ -162,7 +164,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCurrentUser({
       id: session.user.id,
       email: sessionEmail,
-      role: fallbackRoleForEmail(sessionEmail),
+      role: adminRoleForEmail(sessionEmail),
       displayName: getDisplayNameFromAuthUser(session.user),
     });
   }, [loadProfileForUser]);
@@ -311,7 +313,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     if (currentUser?.id === id) {
-      setCurrentUser(prev => (prev ? { ...prev, role } : prev));
+      setCurrentUser(prev => (prev ? { ...prev, role: adminRoleForEmail(prev.email) } : prev));
     }
 
     return { success: true };
