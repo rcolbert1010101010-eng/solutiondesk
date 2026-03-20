@@ -15,6 +15,7 @@ export interface Tag {
 
 export interface Resolution {
   id?: string;
+  issueId?: string | null;
   title?: string;
   summary?: string;
   rootCause?: string;
@@ -25,6 +26,7 @@ export interface Resolution {
   preventionNotes?: string;
   notes?: string;
   notesText?: string;
+  tags?: TagReference[];
   createdAt?: string;
   updatedAt?: string;
   resolvedAt?: string;

@@ -1,13 +1,23 @@
-
 import { supabase } from './supabaseClient';
-import type { Issue, IssueRelationship, RelationshipType, Resolution, Severity, Status, Tag } from '../types';
+import type {
+  Issue,
+  IssueRelationship,
+  RelationshipType,
+  Resolution,
+  Severity,
+  Status,
+  Tag,
+  TagReference,
+} from '../types';
 import { htmlToPlainText, plainTextToHtml } from './richText';
 
 export const TAGS_STORAGE_KEY = 'resolution_desk_tags';
 export const ISSUES_STORAGE_KEY = 'resolution_desk_issues';
 export const RELATIONSHIPS_STORAGE_KEY = 'resolution_desk_relationships';
+export const MIGRATION_FLAG_KEY = 'resolution_desk_migrated_to_supabase';
 export const TAGS_CHANGED_EVENT = 'resolution_desk_tags_changed';
 export const ISSUES_CHANGED_EVENT = 'resolution_desk_issues_changed';
+export const RESOLUTIONS_CHANGED_EVENT = 'resolution_desk_resolutions_changed';
 
 const LEGACY_STORAGE_KEYS = [
   TAGS_STORAGE_KEY,
@@ -18,6 +28,7 @@ const LEGACY_STORAGE_KEYS = [
 
 const HEX_COLOR_REGEX = /^#[0-9a-fA-F]{6}$/;
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const DATA_IMAGE_SRC_REGEX = /^data:image\/[a-z0-9.+-]+;base64,[a-z0-9+/=\s]+$/i;
 
 interface TagRow {
   id: string;
@@ -39,8 +50,6 @@ interface IssueRow {
   confidence: string | null;
   assignee: string | null;
   tags: string[] | null;
-  resolution: Resolution | null;
-  resolutions: Resolution[] | null;
   is_master_incident: boolean | null;
   master_incident_id: string | null;
   relationship_type: RelationshipType | null;
@@ -49,6 +58,17 @@ interface IssueRow {
   last_linked_at: string | null;
   reference_count: number | null;
   confidence_score: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ResolutionRow {
+  id: string;
+  issue_id: string | null;
+  title: string;
+  steps: unknown;
+  notes: string | null;
+  tags: string[] | null;
   created_at: string;
   updated_at: string;
 }
@@ -74,43 +94,34 @@ interface IssueWriteShape extends Partial<Issue> {
   descriptionHtml?: string;
   tags?: string[];
   assignee?: string;
-  resolutions?: Resolution[];
-  resolution?: Resolution;
+  confidence?: string | null;
   isMasterIncident?: boolean;
   masterIncidentId?: string;
+  relationshipType?: RelationshipType;
+  linkedAt?: string;
   linkedIncidentCount?: number;
   lastLinkedAt?: string;
   referenceCount?: number;
   confidenceScore?: number;
+  legacyId?: string | null;
 }
 
-function toIssueRowPayload(input: Partial<Issue> | any): Record<string, any> {
-  return {
-    title: input.title ?? '',
-    description_html: ('descriptionHtml' in input ? input.descriptionHtml : input.description_html) ?? null,
-    description_text: ('descriptionText' in input ? input.descriptionText : input.description_text) ?? null,
-    status: input.status ?? null,
-    severity: input.severity ?? null,
-    confidence: input.confidence ?? null,
-    tags: Array.isArray(input.tags) ? input.tags : [],
-    assignee: input.assignee ?? null,
-    confidence_score: ('confidenceScore' in input ? input.confidenceScore : input.confidence_score) ?? null,
-    is_master_incident: ('isMasterIncident' in input ? input.isMasterIncident : input.is_master_incident) ?? false,
-    master_incident_id: ('masterIncidentId' in input ? input.masterIncidentId : input.master_incident_id) ?? null,
-    relationship_type: ('relationshipType' in input ? input.relationshipType : input.relationship_type) ?? null,
-    linked_at: ('linkedAt' in input ? input.linkedAt : input.linked_at) ?? null,
-    last_linked_at: ('lastLinkedAt' in input ? input.lastLinkedAt : input.last_linked_at) ?? null,
-    linked_incident_count: ('linkedIncidentCount' in input ? input.linkedIncidentCount : input.linked_incident_count) ?? 0,
-    reference_count: ('referenceCount' in input ? input.referenceCount : input.reference_count) ?? 0,
-    legacy_id: ('legacyId' in input ? input.legacyId : input.legacy_id) ?? null,
-  };
+interface ResolutionWriteShape extends Partial<Resolution> {
+  issueId?: string | null;
+  title: string;
+  steps: string[];
+  notes?: string;
+  notesText?: string;
+  tags?: string[];
 }
 
 let bootstrapPromise: Promise<void> | null = null;
 let tagsCache: Tag[] = [];
 let issuesCache: Issue[] = [];
+let libraryResolutionsCache: Resolution[] = [];
 let tagsLoaded = false;
 let issuesLoaded = false;
+let libraryResolutionsLoaded = false;
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -124,6 +135,7 @@ function dispatchWindowEvent(eventName: string): void {
 
 function clearLegacyLocalStorage(): void {
   if (typeof window === 'undefined') return;
+
   for (const key of LEGACY_STORAGE_KEYS) {
     try {
       window.localStorage.removeItem(key);
@@ -133,7 +145,25 @@ function clearLegacyLocalStorage(): void {
   }
 }
 
-function formatSupabaseError(error: unknown, fallback: string): Error {
+function getLocalStorageItem(key: string): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function setLocalStorageItem(key: string, value: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // ignore storage write failures
+  }
+}
+
+export function formatSupabaseError(error: unknown, fallback: string): Error {
   if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string' && error.message.trim()) {
     return new Error(error.message.trim());
   }
@@ -178,47 +208,101 @@ function sortTags(tags: Tag[]): Tag[] {
   return [...tags].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-function createResolutionId(): string {
-  return `RES-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
-function normalizeResolutionContent(resolution: Resolution): Resolution {
-  const normalized = { ...resolution };
-  const timestamp = nowIso();
-
-  if (!normalized.id) {
-    normalized.id = createResolutionId();
-  }
-  if (!normalized.createdAt) {
-    normalized.createdAt = normalized.resolvedAt ?? timestamp;
-  }
-  if (!normalized.updatedAt) {
-    normalized.updatedAt = normalized.createdAt ?? timestamp;
-  }
-
-  if (normalized.notes && !normalized.notesText) {
-    normalized.notesText = htmlToPlainText(normalized.notes);
-  } else if (!normalized.notes && normalized.notesText) {
-    normalized.notes = plainTextToHtml(normalized.notesText);
-  }
-
-  return normalized;
+function isSafeDataImageSrc(src: string): boolean {
+  return DATA_IMAGE_SRC_REGEX.test(src.trim());
 }
 
-function normalizeResolutionList(resolutions?: Resolution[] | null, fallback?: Resolution | null): Resolution[] {
-  const source = Array.isArray(resolutions)
-    ? resolutions
-    : fallback
-      ? [fallback]
-      : [];
-
-  return source.map(normalizeResolutionContent);
+function parseImageToken(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('[img:') || !trimmed.endsWith(']')) return null;
+  const src = trimmed.slice(5, -1).trim();
+  return isSafeDataImageSrc(src) ? src : null;
 }
 
-function normalizeSingleResolution(resolution?: Resolution | null, resolutions?: Resolution[] | null): Resolution | undefined {
-  if (resolution) return normalizeResolutionContent(resolution);
-  const normalized = normalizeResolutionList(resolutions);
-  return normalized[0];
+function stepsLinesToHtml(lines: string[]): string {
+  if (lines.length === 0) return '<p></p>';
+  const items = lines.map(line => {
+    const imageSrc = parseImageToken(line);
+    if (imageSrc) {
+      return `<li><img src="${imageSrc}" alt="step image" /></li>`;
+    }
+    return `<li>${escapeHtml(line)}</li>`;
+  });
+  return `<ol>${items.join('')}</ol>`;
+}
+
+function toStepText(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function normalizeResolutionSteps(steps: unknown): string[] {
+  if (Array.isArray(steps)) {
+    return steps
+      .flatMap(step => toStepText(step).split(/\r?\n/))
+      .map(step => step.trim())
+      .filter(Boolean);
+  }
+
+  if (typeof steps === 'string') {
+    return steps
+      .split(/\r?\n/)
+      .map(step => step.trim())
+      .filter(Boolean);
+  }
+
+  if (steps && typeof steps === 'object') {
+    return Object.values(steps as Record<string, unknown>)
+      .flatMap(value => toStepText(value).split(/\r?\n/))
+      .map(step => step.trim())
+      .filter(Boolean);
+  }
+
+  return [];
+}
+
+function normalizeResolutionNotesHtml(input: Partial<Resolution> | Record<string, any>): string | undefined {
+  const notes = typeof input.notes === 'string' ? input.notes.trim() : '';
+  if (notes) return notes;
+
+  const notesText = typeof input.notesText === 'string' ? input.notesText.trim() : '';
+  if (notesText) return plainTextToHtml(notesText);
+
+  const segments = [
+    typeof input.summary === 'string' ? input.summary.trim() : '',
+    typeof input.rootCause === 'string' ? input.rootCause.trim() : '',
+    typeof input.finalResolution === 'string' ? input.finalResolution.trim() : '',
+    typeof input.preventionNotes === 'string' ? input.preventionNotes.trim() : '',
+  ].filter(Boolean);
+
+  if (segments.length === 0) return undefined;
+  return plainTextToHtml(segments.join('\n\n'));
+}
+
+function normalizeResolutionTitle(input: Partial<Resolution> | Record<string, any>, steps: string[]): string {
+  const candidates = [
+    typeof input.title === 'string' ? input.title.trim() : '',
+    typeof input.summary === 'string' ? input.summary.trim() : '',
+    steps[0] ?? '',
+    typeof input.finalResolution === 'string' ? input.finalResolution.trim() : '',
+  ];
+
+  return candidates.find(Boolean) ?? 'Resolution';
 }
 
 function normalizeDescriptionFields(input: {
@@ -253,6 +337,11 @@ function mapTagRow(row: TagRow): Tag {
   };
 }
 
+function mapTagIdsToNames(tagIds: string[] | null | undefined, tagsById: Map<string, Tag>): string[] {
+  return (tagIds ?? [])
+    .map(tagId => tagsById.get(tagId)?.name)
+    .filter((name): name is string => Boolean(name));
+}
 function buildRelationshipStats(rows: IssueRow[]): {
   counts: Map<string, number>;
   lastLinkedAt: Map<string, string>;
@@ -274,13 +363,60 @@ function buildRelationshipStats(rows: IssueRow[]): {
 
   return { counts, lastLinkedAt };
 }
-function mapIssueRow(row: IssueRow, tagsById: Map<string, Tag>, rows: IssueRow[]): Issue {
+
+function mapResolutionRow(row: ResolutionRow, tagsById: Map<string, Tag>): Resolution {
+  const steps = normalizeResolutionSteps(row.steps);
+  const notesHtml = row.notes?.trim() || undefined;
+  const notesText = notesHtml ? htmlToPlainText(notesHtml) : undefined;
+  const summary = row.title?.trim() || steps[0] || notesText || 'Resolution';
+  const rootCause = notesText ? notesText.split(/\r?\n/).map(line => line.trim()).find(Boolean) : undefined;
+
+  return {
+    id: row.id,
+    issueId: row.issue_id,
+    title: row.title,
+    summary,
+    rootCause,
+    steps,
+    stepsHtml: stepsLinesToHtml(steps),
+    notes: notesHtml,
+    notesText,
+    tags: mapTagIdsToNames(row.tags, tagsById),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function groupResolutionsByIssue(rows: ResolutionRow[], tagsById: Map<string, Tag>): Map<string, Resolution[]> {
+  const grouped = new Map<string, Resolution[]>();
+
+  for (const row of rows) {
+    if (!row.issue_id) continue;
+    const resolution = mapResolutionRow(row, tagsById);
+    const current = grouped.get(row.issue_id) ?? [];
+    current.push(resolution);
+    grouped.set(row.issue_id, current);
+  }
+
+  for (const [issueId, list] of grouped.entries()) {
+    grouped.set(issueId, list.sort((a, b) => new Date(b.updatedAt ?? b.createdAt ?? 0).getTime() - new Date(a.updatedAt ?? a.createdAt ?? 0).getTime()));
+  }
+
+  return grouped;
+}
+
+function mapIssueRow(
+  row: IssueRow,
+  tagsById: Map<string, Tag>,
+  rows: IssueRow[],
+  issueResolutions: Map<string, Resolution[]>,
+): Issue {
   const { counts, lastLinkedAt } = buildRelationshipStats(rows);
   const descriptions = normalizeDescriptionFields({
     descriptionText: row.description_text,
     descriptionHtml: row.description_html,
   });
-  const resolutions = normalizeResolutionList(row.resolutions, row.resolution);
+  const resolutions = issueResolutions.get(row.id) ?? [];
 
   return {
     id: row.id,
@@ -294,14 +430,12 @@ function mapIssueRow(row: IssueRow, tagsById: Map<string, Tag>, rows: IssueRow[]
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     assignee: row.assignee ?? undefined,
-    tags: (row.tags ?? [])
-      .map(tagId => tagsById.get(tagId)?.name)
-      .filter((tagName): tagName is string => Boolean(tagName)),
-    resolution: normalizeSingleResolution(row.resolution, resolutions),
+    tags: mapTagIdsToNames(row.tags, tagsById),
+    resolution: resolutions[0],
     resolutions,
     isMasterIncident: Boolean(row.is_master_incident || (counts.get(row.id) ?? 0) > 0),
     masterIncidentId: row.master_incident_id ?? undefined,
-    linkedIncidentCount: counts.get(row.id) ?? 0,
+    linkedIncidentCount: counts.get(row.id) ?? row.linked_incident_count ?? 0,
     lastLinkedAt: lastLinkedAt.get(row.id) ?? row.last_linked_at ?? undefined,
     referenceCount: row.reference_count ?? 0,
     confidenceScore: row.confidence_score ?? undefined,
@@ -353,15 +487,125 @@ async function fetchIssueRowsFromSupabase(): Promise<IssueRow[]> {
   }
 }
 
+async function fetchIssueRowByIdFromSupabase(id: string): Promise<IssueRow | undefined> {
+  try {
+    await ensureSupabaseBootstrap();
+
+    const { data, error } = await supabase
+      .from('issues')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data as IssueRow | undefined;
+  } catch (error) {
+    console.error(`Unable to load issue ${id} from Supabase.`, error);
+    return undefined;
+  }
+}
+
+async function fetchResolutionRowsFromSupabase(): Promise<ResolutionRow[]> {
+  try {
+    await ensureSupabaseBootstrap();
+
+    const { data, error } = await supabase
+      .from('resolutions')
+      .select('*')
+      .order('updated_at', { ascending: false });
+
+    if (error) throw error;
+    return (data ?? []) as ResolutionRow[];
+  } catch (error) {
+    console.error('Unable to load resolutions from Supabase.', error);
+    return [];
+  }
+}
+
+async function fetchIssueResolutionRowsFromSupabase(issueId: string): Promise<ResolutionRow[]> {
+  try {
+    await ensureSupabaseBootstrap();
+
+    const { data, error } = await supabase
+      .from('resolutions')
+      .select('*')
+      .eq('issue_id', issueId)
+      .order('updated_at', { ascending: false });
+
+    if (error) throw error;
+    return (data ?? []) as ResolutionRow[];
+  } catch (error) {
+    console.error(`Unable to load resolutions for issue ${issueId}.`, error);
+    return [];
+  }
+}
+
+async function fetchLibraryResolutionRowsFromSupabase(): Promise<ResolutionRow[]> {
+  try {
+    await ensureSupabaseBootstrap();
+
+    const { data, error } = await supabase
+      .from('resolutions')
+      .select('*')
+      .is('issue_id', null)
+      .order('updated_at', { ascending: false });
+
+    if (error) throw error;
+    return (data ?? []) as ResolutionRow[];
+  } catch (error) {
+    console.error('Unable to load library resolutions from Supabase.', error);
+    return [];
+  }
+}
+
 async function fetchIssuesFromSupabase(): Promise<Issue[]> {
-  const [rows, tags] = await Promise.all([
+  const [rows, tags, resolutionRows] = await Promise.all([
     fetchIssueRowsFromSupabase(),
     fetchTagsFromSupabase(),
+    fetchResolutionRowsFromSupabase(),
   ]);
+
   const tagMap = new Map(tags.map(tag => [tag.id, tag]));
-  issuesCache = rows.map(row => mapIssueRow(row, tagMap, rows));
+  const resolutionsByIssue = groupResolutionsByIssue(resolutionRows, tagMap);
+  issuesCache = rows.map(row => mapIssueRow(row, tagMap, rows, resolutionsByIssue));
   issuesLoaded = true;
   return [...issuesCache];
+}
+
+async function fetchIssueFromSupabase(id: string): Promise<Issue | undefined> {
+  const [row, rows, tags, resolutionRows] = await Promise.all([
+    fetchIssueRowByIdFromSupabase(id),
+    fetchIssueRowsFromSupabase(),
+    fetchTagsFromSupabase(),
+    fetchIssueResolutionRowsFromSupabase(id),
+  ]);
+
+  if (!row) return undefined;
+
+  const tagMap = new Map(tags.map(tag => [tag.id, tag]));
+  const resolutionsByIssue = groupResolutionsByIssue(resolutionRows, tagMap);
+  const issue = mapIssueRow(row, tagMap, rows, resolutionsByIssue);
+
+  const index = issuesCache.findIndex(item => item.id === issue.id);
+  if (index >= 0) {
+    issuesCache[index] = issue;
+  } else if (issuesLoaded) {
+    issuesCache = [issue, ...issuesCache.filter(item => item.id !== issue.id)];
+  }
+
+  return issue;
+}
+
+async function fetchLibraryResolutionsFromSupabase(): Promise<Resolution[]> {
+  const [tags, rows] = await Promise.all([
+    fetchTagsFromSupabase(),
+    fetchLibraryResolutionRowsFromSupabase(),
+  ]);
+
+  const tagMap = new Map(tags.map(tag => [tag.id, tag]));
+  libraryResolutionsCache = rows.map(row => mapResolutionRow(row, tagMap));
+  libraryResolutionsLoaded = true;
+  return [...libraryResolutionsCache];
 }
 
 async function ensureTagsLoaded(): Promise<Tag[]> {
@@ -372,6 +616,11 @@ async function ensureTagsLoaded(): Promise<Tag[]> {
 async function ensureIssuesLoaded(): Promise<Issue[]> {
   if (issuesLoaded) return [...issuesCache];
   return fetchIssuesFromSupabase();
+}
+
+async function ensureLibraryResolutionsLoaded(): Promise<Resolution[]> {
+  if (libraryResolutionsLoaded) return [...libraryResolutionsCache];
+  return fetchLibraryResolutionsFromSupabase();
 }
 
 function parseLegacyTags(raw: string | null): Tag[] {
@@ -419,7 +668,7 @@ function parseLegacyTags(raw: string | null): Tag[] {
         name,
         color: normalizeColor(candidate.color),
         createdAt: candidate.createdAt ?? timestamp,
-        updatedAt: candidate.updatedAt ?? timestamp,
+        updatedAt: candidate.updatedAt ?? candidate.createdAt ?? timestamp,
       });
     }
 
@@ -428,15 +677,59 @@ function parseLegacyTags(raw: string | null): Tag[] {
     return [];
   }
 }
-
 function parseLegacyRelationships(raw: string | null): LegacyRelationshipRecord[] {
   if (!raw || !raw.trim()) return [];
+
   try {
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? (parsed as LegacyRelationshipRecord[]) : [];
   } catch {
     return [];
   }
+}
+
+function normalizeLegacyResolution(resolution: Resolution, issueId?: string): Resolution {
+  const steps = normalizeResolutionSteps(resolution.steps ?? resolution.stepsTaken ?? resolution.stepsHtml ?? '');
+  const notes = normalizeResolutionNotesHtml(resolution);
+  const notesText = notes ? htmlToPlainText(notes) : undefined;
+  const title = normalizeResolutionTitle(resolution, steps);
+  const timestamp = resolution.updatedAt ?? resolution.createdAt ?? resolution.resolvedAt ?? nowIso();
+
+  return {
+    ...resolution,
+    id: resolution.id || createUuid(),
+    issueId: resolution.issueId ?? issueId ?? null,
+    title,
+    summary: resolution.summary ?? title,
+    rootCause: resolution.rootCause ?? (notesText ? notesText.split(/\r?\n/).find(Boolean) : undefined),
+    steps,
+    stepsHtml: stepsLinesToHtml(steps),
+    notes,
+    notesText,
+    tags: Array.isArray(resolution.tags) ? resolution.tags : [],
+    createdAt: resolution.createdAt ?? resolution.resolvedAt ?? timestamp,
+    updatedAt: timestamp,
+  };
+}
+
+function dedupeResolutions(resolutions: Resolution[]): Resolution[] {
+  const seen = new Set<string>();
+  const list: Resolution[] = [];
+
+  for (const resolution of resolutions) {
+    const key = resolution.id || JSON.stringify({
+      title: resolution.title,
+      steps: resolution.steps,
+      notes: resolution.notes,
+      issueId: resolution.issueId ?? null,
+    });
+
+    if (seen.has(key)) continue;
+    seen.add(key);
+    list.push(resolution);
+  }
+
+  return list;
 }
 
 function parseLegacyIssues(raw: string | null): Issue[] {
@@ -452,7 +745,11 @@ function parseLegacyIssues(raw: string | null): Issue[] {
         descriptionText: issue.descriptionText,
         descriptionHtml: issue.descriptionHtml,
       });
-      const resolutions = normalizeResolutionList(issue.resolutions, issue.resolution);
+
+      const legacyResolutions = dedupeResolutions([
+        ...(Array.isArray(issue.resolutions) ? issue.resolutions : []),
+        ...(issue.resolution ? [issue.resolution] : []),
+      ].map(resolution => normalizeLegacyResolution(resolution, issue.id)));
 
       return {
         ...issue,
@@ -461,8 +758,8 @@ function parseLegacyIssues(raw: string | null): Issue[] {
         severity: normalizeSeverity(issue.severity),
         status: normalizeStatus(issue.status),
         tags: Array.isArray(issue.tags) ? Array.from(new Set(issue.tags.map(tag => normalizeName(tag)).filter(Boolean))) : [],
-        resolution: normalizeSingleResolution(issue.resolution, resolutions),
-        resolutions,
+        resolution: legacyResolutions[0],
+        resolutions: legacyResolutions,
         createdAt: issue.createdAt ?? nowIso(),
         updatedAt: issue.updatedAt ?? issue.createdAt ?? nowIso(),
       };
@@ -490,12 +787,14 @@ function applyLegacyRelationships(issues: Issue[], relationships: LegacyRelation
     if (!sourceIssue || !masterIssue) continue;
 
     sourceIssue.masterIncidentId = masterId;
+    sourceIssue.updatedAt = linkedAt;
     masterIssue.isMasterIncident = true;
     masterIssue.lastLinkedAt = linkedAt;
   }
 
   return Array.from(byId.values());
 }
+
 function mergeLegacyTags(tags: Tag[], issues: Issue[]): Tag[] {
   const merged = new Map<string, Tag>();
 
@@ -515,106 +814,150 @@ function mergeLegacyTags(tags: Tag[], issues: Issue[]): Tag[] {
         updatedAt: timestamp,
       });
     }
+
+    for (const resolution of issue.resolutions ?? []) {
+      for (const tagName of resolution.tags ?? []) {
+        const key = normalizeTagNameKey(tagName);
+        if (!key || merged.has(key)) continue;
+        const timestamp = nowIso();
+        merged.set(key, {
+          id: createUuid(),
+          name: normalizeName(tagName),
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        });
+      }
+    }
   }
 
   return sortTags(Array.from(merged.values()));
 }
 
+function collectLegacyIssueResolutions(issues: Issue[]): Resolution[] {
+  return issues.flatMap(issue => (issue.resolutions ?? []).map(resolution => ({
+    ...resolution,
+    issueId: issue.id,
+  })));
+}
+
+function hasLegacyStoreData(): boolean {
+  return LEGACY_STORAGE_KEYS.some(key => Boolean(getLocalStorageItem(key)?.trim()));
+}
+
+async function countRows(table: 'tags' | 'issues' | 'resolutions'): Promise<number> {
+  const { count, error } = await supabase.from(table).select('id', { count: 'exact', head: true });
+  if (error) throw error;
+  return count ?? 0;
+}
+
 async function migrateLegacyLocalStorageToSupabase(): Promise<void> {
   if (typeof window === 'undefined') return;
 
-  const [tagCountResult, issueCountResult] = await Promise.all([
-    supabase.from('tags').select('id', { count: 'exact', head: true }),
-    supabase.from('issues').select('id', { count: 'exact', head: true }),
-  ]);
-
-  if (tagCountResult.error) throw tagCountResult.error;
-  if (issueCountResult.error) throw issueCountResult.error;
-
-  const tagCount = tagCountResult.count ?? 0;
-  const issueCount = issueCountResult.count ?? 0;
-
-  if (tagCount > 0 || issueCount > 0) {
+  const migrationFlag = getLocalStorageItem(MIGRATION_FLAG_KEY);
+  if (migrationFlag === '1') {
     clearLegacyLocalStorage();
     return;
   }
 
-  const legacyRelationships = parseLegacyRelationships(window.localStorage.getItem(RELATIONSHIPS_STORAGE_KEY));
-  const legacyIssues = applyLegacyRelationships(
-    parseLegacyIssues(window.localStorage.getItem(ISSUES_STORAGE_KEY)),
-    legacyRelationships,
-  );
-  const legacyTags = mergeLegacyTags(parseLegacyTags(window.localStorage.getItem(TAGS_STORAGE_KEY)), legacyIssues);
+  const [tagCount, issueCount, resolutionCount] = await Promise.all([
+    countRows('tags'),
+    countRows('issues'),
+    countRows('resolutions'),
+  ]);
 
-  if (legacyIssues.length === 0 && legacyTags.length === 0) {
+  if (tagCount > 0 || issueCount > 0 || resolutionCount > 0) {
+    clearLegacyLocalStorage();
+    setLocalStorageItem(MIGRATION_FLAG_KEY, '1');
     return;
   }
 
-  const idMap = new Map<string, string>();
-  for (const issue of legacyIssues) {
-    idMap.set(issue.id, isUuid(issue.id) ? issue.id : createUuid());
+  if (!hasLegacyStoreData()) {
+    return;
   }
 
-  const migratedTags: TagRow[] = legacyTags.map(tag => ({
-    id: isUuid(tag.id) ? tag.id : createUuid(),
-    name: tag.name,
-    color: tag.color ?? null,
-    created_at: tag.createdAt ?? nowIso(),
-    updated_at: tag.updatedAt ?? tag.createdAt ?? nowIso(),
-  }));
+  const legacyRelationships = parseLegacyRelationships(getLocalStorageItem(RELATIONSHIPS_STORAGE_KEY));
+  const legacyIssues = applyLegacyRelationships(parseLegacyIssues(getLocalStorageItem(ISSUES_STORAGE_KEY)), legacyRelationships);
+  const legacyTags = mergeLegacyTags(parseLegacyTags(getLocalStorageItem(TAGS_STORAGE_KEY)), legacyIssues);
+  const legacyResolutions = collectLegacyIssueResolutions(legacyIssues);
 
-  const tagIdByName = new Map(migratedTags.map(tag => [normalizeTagNameKey(tag.name), tag.id]));
+  if (legacyTags.length === 0 && legacyIssues.length === 0 && legacyResolutions.length === 0) {
+    return;
+  }
 
-  const migratedIssues: IssueRow[] = legacyIssues.map(issue => {
+  const oldTagIdToNewId = new Map<string, string>();
+  const tagIdByName = new Map<string, string>();
+
+  const tagRows: TagRow[] = legacyTags.map(tag => {
+    const id = isUuid(tag.id) ? tag.id : createUuid();
+    oldTagIdToNewId.set(tag.id, id);
+    tagIdByName.set(normalizeTagNameKey(tag.name), id);
+
+    return {
+      id,
+      name: normalizeName(tag.name),
+      color: normalizeColor(tag.color) ?? null,
+      created_at: tag.createdAt ?? nowIso(),
+      updated_at: tag.updatedAt ?? tag.createdAt ?? nowIso(),
+    };
+  });
+
+  if (tagRows.length > 0) {
+    const { error } = await supabase.from('tags').insert(tagRows);
+    if (error) throw error;
+  }
+
+  const issueIdMap = new Map<string, string>();
+  for (const issue of legacyIssues) {
+    issueIdMap.set(issue.id, isUuid(issue.id) ? issue.id : createUuid());
+  }
+
+  const resolveLegacyTagRefs = (refs?: TagReference[]): string[] => {
+    if (!Array.isArray(refs)) return [];
+
+    return Array.from(new Set(refs
+      .map(ref => {
+        if (!ref) return undefined;
+        if (oldTagIdToNewId.has(ref)) return oldTagIdToNewId.get(ref);
+        return tagIdByName.get(normalizeTagNameKey(ref));
+      })
+      .filter((value): value is string => Boolean(value))));
+  };
+
+  const issueRows: (IssueRow & { id: string })[] = legacyIssues.map(issue => {
     const descriptions = normalizeDescriptionFields({
       description: issue.description,
       descriptionText: issue.descriptionText,
       descriptionHtml: issue.descriptionHtml,
     });
-    const resolutions = normalizeResolutionList(issue.resolutions, issue.resolution);
-    const migratedId = idMap.get(issue.id) ?? createUuid();
+    const migratedId = issueIdMap.get(issue.id) ?? createUuid();
+    const linkedAt = issue.updatedAt ?? issue.createdAt ?? nowIso();
 
     return {
       id: migratedId,
-      legacy_id: issue.id,
-      title: issue.title,
-      description_html: descriptions.descriptionHtml,
-      description_text: descriptions.descriptionText,
-      system_affected: issue.systemAffected ?? '',
-      status: normalizeStatus(issue.status),
-      severity: normalizeSeverity(issue.severity),
-      confidence: null,
-      assignee: issue.assignee ?? null,
-      tags: (issue.tags ?? [])
-        .map(tagName => tagIdByName.get(normalizeTagNameKey(tagName)))
-        .filter((tagId): tagId is string => Boolean(tagId)),
-      resolution: normalizeSingleResolution(issue.resolution, resolutions) ?? null,
-      resolutions,
-      is_master_incident: Boolean(issue.isMasterIncident),
-      master_incident_id: issue.masterIncidentId ? (idMap.get(issue.masterIncidentId) ?? null) : null,
-      relationship_type: null,
-      linked_at: null,
-      linked_incident_count: issue.linkedIncidentCount ?? 0,
-      last_linked_at: issue.lastLinkedAt ?? null,
-      reference_count: issue.referenceCount ?? 0,
-      confidence_score: issue.confidenceScore ?? null,
+      ...toIssueRowPayload({
+        title: issue.title,
+        descriptionHtml: descriptions.descriptionHtml,
+        descriptionText: descriptions.descriptionText,
+        systemAffected: issue.systemAffected ?? '',
+        status: normalizeStatus(issue.status),
+        severity: normalizeSeverity(issue.severity),
+        confidence: null,
+        tags: resolveLegacyTagRefs(issue.tags),
+        assignee: issue.assignee ?? null,
+        isMasterIncident: Boolean(issue.isMasterIncident),
+        masterIncidentId: issue.masterIncidentId ? (issueIdMap.get(issue.masterIncidentId) ?? null) : null,
+        relationshipType: null,
+        linkedAt: issue.masterIncidentId ? linkedAt : null,
+        lastLinkedAt: issue.lastLinkedAt ?? null,
+        linkedIncidentCount: issue.linkedIncidentCount ?? 0,
+        referenceCount: issue.referenceCount ?? 0,
+        confidenceScore: issue.confidenceScore ?? null,
+        legacyId: issue.id,
+      }),
       created_at: issue.createdAt ?? nowIso(),
       updated_at: issue.updatedAt ?? issue.createdAt ?? nowIso(),
-    };
+    } as IssueRow & { id: string };
   });
-
-  for (const issue of legacyIssues) {
-    if (!issue.masterIncidentId) continue;
-    const migratedId = idMap.get(issue.id);
-    const migratedMasterId = idMap.get(issue.masterIncidentId);
-    if (!migratedId || !migratedMasterId) continue;
-
-    const target = migratedIssues.find(row => row.id === migratedId);
-    if (!target) continue;
-
-    target.master_incident_id = migratedMasterId;
-    target.linked_at = issue.updatedAt ?? issue.createdAt ?? nowIso();
-  }
 
   for (const relationship of legacyRelationships) {
     const sourceId = relationship.sourceId ?? relationship.source_issue_id;
@@ -623,30 +966,47 @@ async function migrateLegacyLocalStorageToSupabase(): Promise<void> {
     const linkedAt = relationship.linkedAt ?? relationship.linked_at ?? nowIso();
     if (!sourceId || !masterId || !type) continue;
 
-    const migratedSourceId = idMap.get(sourceId);
-    const migratedMasterId = idMap.get(masterId);
-    if (!migratedSourceId || !migratedMasterId) continue;
-
-    const target = migratedIssues.find(row => row.id === migratedSourceId);
+    const target = issueRows.find(row => row.id === issueIdMap.get(sourceId));
     if (!target) continue;
 
-    target.master_incident_id = migratedMasterId;
+    target.master_incident_id = issueIdMap.get(masterId) ?? null;
     target.relationship_type = type;
     target.linked_at = linkedAt;
   }
 
-  if (migratedTags.length > 0) {
-    const { error } = await supabase.from('tags').insert(migratedTags);
+  if (issueRows.length > 0) {
+    const { error } = await supabase.from('issues').insert(issueRows);
     if (error) throw error;
   }
 
-  if (migratedIssues.length > 0) {
-    const { error } = await supabase.from('issues').insert(migratedIssues);
+  const resolutionRows = legacyResolutions.map(resolution => {
+    const steps = normalizeResolutionSteps(resolution.steps ?? resolution.stepsHtml ?? resolution.stepsTaken ?? '');
+    const notes = normalizeResolutionNotesHtml(resolution);
+    const title = normalizeResolutionTitle(resolution, steps);
+    const issueId = resolution.issueId ? issueIdMap.get(resolution.issueId) ?? null : null;
+
+    return {
+      id: isUuid(resolution.id) ? resolution.id : createUuid(),
+      ...toResolutionRowPayload({
+        issueId,
+        title,
+        steps,
+        notes,
+        tags: resolveLegacyTagRefs(resolution.tags),
+      }),
+      created_at: resolution.createdAt ?? resolution.resolvedAt ?? nowIso(),
+      updated_at: resolution.updatedAt ?? resolution.createdAt ?? resolution.resolvedAt ?? nowIso(),
+    } as ResolutionRow & { id: string };
+  });
+
+  if (resolutionRows.length > 0) {
+    const { error } = await supabase.from('resolutions').insert(resolutionRows);
     if (error) throw error;
   }
 
+  setLocalStorageItem(MIGRATION_FLAG_KEY, '1');
   clearLegacyLocalStorage();
-  console.info('SolutionDesk localStorage data migrated to Supabase.');
+  console.info(`Migrated ${tagRows.length} tags, ${issueRows.length} issues, ${resolutionRows.length} resolutions to Supabase`);
 }
 
 async function ensureSupabaseBootstrap(): Promise<void> {
@@ -660,13 +1020,13 @@ async function ensureSupabaseBootstrap(): Promise<void> {
   await bootstrapPromise;
 }
 
-async function resolveTagIds(tagNames?: string[]): Promise<string[]> {
-  if (!tagNames || tagNames.length === 0) return [];
+async function resolveTagIds(tagRefs?: TagReference[]): Promise<string[]> {
+  if (!Array.isArray(tagRefs) || tagRefs.length === 0) return [];
 
   const tags = await ensureTagsLoaded();
   const tagMap = new Map(tags.map(tag => [normalizeTagNameKey(tag.name), tag.id]));
-  const resolved = tagNames
-    .map(tagName => tagMap.get(normalizeTagNameKey(tagName)))
+  const resolved = tagRefs
+    .map(ref => tagMap.get(normalizeTagNameKey(String(ref))))
     .filter((tagId): tagId is string => Boolean(tagId));
 
   return Array.from(new Set(resolved));
@@ -679,7 +1039,6 @@ function toIssueWriteShape(base: Partial<Issue>, updates?: Partial<Issue>): Issu
     descriptionText: merged.descriptionText,
     descriptionHtml: merged.descriptionHtml,
   });
-  const resolutions = normalizeResolutionList(merged.resolutions, merged.resolution);
 
   return {
     title: (merged.title ?? '').trim(),
@@ -691,17 +1050,68 @@ function toIssueWriteShape(base: Partial<Issue>, updates?: Partial<Issue>): Issu
     description: descriptions.description,
     descriptionText: descriptions.descriptionText,
     descriptionHtml: descriptions.descriptionHtml,
-    resolutions,
-    resolution: normalizeSingleResolution(merged.resolution, resolutions),
+    confidence: (merged as { confidence?: string | null }).confidence ?? null,
     isMasterIncident: Boolean(merged.isMasterIncident),
     masterIncidentId: merged.masterIncidentId,
+    relationshipType: (merged as { relationshipType?: RelationshipType }).relationshipType,
+    linkedAt: (merged as { linkedAt?: string }).linkedAt,
     linkedIncidentCount: merged.linkedIncidentCount,
     lastLinkedAt: merged.lastLinkedAt,
     referenceCount: merged.referenceCount,
     confidenceScore: merged.confidenceScore,
+    legacyId: (merged as { legacyId?: string | null }).legacyId ?? null,
   };
 }
-async function toIssueInsertRow(issue: Omit<Issue, 'id' | 'createdAt'>): Promise<Omit<IssueRow, 'id' | 'created_at' | 'updated_at'>> {
+
+function toResolutionWriteShape(base: Partial<Resolution>, updates?: Partial<Resolution>): ResolutionWriteShape {
+  const merged = { ...base, ...updates };
+  const steps = normalizeResolutionSteps(merged.steps ?? merged.stepsHtml ?? merged.stepsTaken ?? '');
+  const notes = normalizeResolutionNotesHtml(merged);
+  const notesText = notes ? htmlToPlainText(notes) : undefined;
+
+  return {
+    issueId: merged.issueId ?? null,
+    title: normalizeResolutionTitle(merged, steps),
+    steps,
+    notes,
+    notesText,
+    tags: Array.isArray(merged.tags) ? merged.tags : [],
+  };
+}
+
+export function toIssueRowPayload(input: Partial<Issue> | any): Record<string, any> {
+  return {
+    title: input.title ?? '',
+    description_html: ('descriptionHtml' in input ? input.descriptionHtml : input.description_html) ?? null,
+    description_text: ('descriptionText' in input ? input.descriptionText : input.description_text) ?? null,
+    system_affected: ('systemAffected' in input ? input.systemAffected : input.system_affected) ?? '',
+    status: input.status ?? null,
+    severity: input.severity ?? null,
+    confidence: input.confidence ?? null,
+    tags: Array.isArray(input.tags) ? input.tags : [],
+    assignee: input.assignee ?? null,
+    confidence_score: ('confidenceScore' in input ? input.confidenceScore : input.confidence_score) ?? null,
+    is_master_incident: ('isMasterIncident' in input ? input.isMasterIncident : input.is_master_incident) ?? false,
+    master_incident_id: ('masterIncidentId' in input ? input.masterIncidentId : input.master_incident_id) ?? null,
+    relationship_type: ('relationshipType' in input ? input.relationshipType : input.relationship_type) ?? null,
+    linked_at: ('linkedAt' in input ? input.linkedAt : input.linked_at) ?? null,
+    last_linked_at: ('lastLinkedAt' in input ? input.lastLinkedAt : input.last_linked_at) ?? null,
+    linked_incident_count: ('linkedIncidentCount' in input ? input.linkedIncidentCount : input.linked_incident_count) ?? 0,
+    reference_count: ('referenceCount' in input ? input.referenceCount : input.reference_count) ?? 0,
+    legacy_id: ('legacyId' in input ? input.legacyId : input.legacy_id) ?? null,
+  };
+}
+
+export function toResolutionRowPayload(input: Partial<Resolution> | any): Record<string, any> {
+  return {
+    issue_id: ('issueId' in input ? input.issueId : input.issue_id) ?? null,
+    title: input.title ?? 'Resolution',
+    steps: Array.isArray(input.steps) ? input.steps : normalizeResolutionSteps(input.steps),
+    notes: input.notes ?? null,
+    tags: Array.isArray(input.tags) ? input.tags : [],
+  };
+}
+async function toIssueInsertRow(issue: Omit<Issue, 'id' | 'createdAt'>): Promise<Record<string, any>> {
   const normalized = toIssueWriteShape(issue);
   if (!normalized.title) {
     throw new Error('Issue title is required.');
@@ -710,32 +1120,62 @@ async function toIssueInsertRow(issue: Omit<Issue, 'id' | 'createdAt'>): Promise
   return toIssueRowPayload({
     ...normalized,
     tags: await resolveTagIds(normalized.tags),
-    confidence: null,
     legacyId: null,
-  }) as Omit<IssueRow, 'id' | 'created_at' | 'updated_at'>;
+  });
 }
 
-async function toIssueUpdateRow(current: Issue, updates: Partial<Issue>): Promise<Partial<IssueRow>> {
+async function toIssueUpdateRow(current: Issue, updates: Partial<Issue>): Promise<Record<string, any>> {
   const normalized = toIssueWriteShape(current, updates);
-
   return toIssueRowPayload({
     ...normalized,
     tags: await resolveTagIds(normalized.tags),
-  }) as Partial<IssueRow>;
+  });
 }
 
-async function refreshTagsAndDispatch(alsoIssues = false): Promise<void> {
+async function toResolutionInsertRow(issueId: string | null, resolution: Omit<Resolution, 'id'> | Resolution): Promise<Record<string, any>> {
+  const normalized = toResolutionWriteShape({
+    ...resolution,
+    issueId,
+  });
+
+  return toResolutionRowPayload({
+    ...normalized,
+    issueId,
+    tags: await resolveTagIds(normalized.tags),
+  });
+}
+
+async function toResolutionUpdateRow(current: Resolution, updates: Partial<Resolution>): Promise<Record<string, any>> {
+  const normalized = toResolutionWriteShape(current, updates);
+  return toResolutionRowPayload({
+    ...normalized,
+    tags: await resolveTagIds(normalized.tags),
+  });
+}
+
+async function refreshTagsAndDispatch(options?: { alsoIssues?: boolean; alsoLibraryResolutions?: boolean }): Promise<void> {
   await fetchTagsFromSupabase();
   dispatchWindowEvent(TAGS_CHANGED_EVENT);
-  if (alsoIssues) {
+
+  if (options?.alsoIssues) {
     await fetchIssuesFromSupabase();
     dispatchWindowEvent(ISSUES_CHANGED_EVENT);
+  }
+
+  if (options?.alsoLibraryResolutions) {
+    await fetchLibraryResolutionsFromSupabase();
+    dispatchWindowEvent(RESOLUTIONS_CHANGED_EVENT);
   }
 }
 
 async function refreshIssuesAndDispatch(): Promise<void> {
   await fetchIssuesFromSupabase();
   dispatchWindowEvent(ISSUES_CHANGED_EVENT);
+}
+
+async function refreshLibraryResolutionsAndDispatch(): Promise<void> {
+  await fetchLibraryResolutionsFromSupabase();
+  dispatchWindowEvent(RESOLUTIONS_CHANGED_EVENT);
 }
 
 export async function listTagsFromStore(): Promise<Tag[]> {
@@ -762,7 +1202,7 @@ export async function createTagInStore(input: { name: string; color?: string }):
   const tags = await ensureTagsLoaded();
   const duplicate = tags.find(tag => normalizeTagNameKey(tag.name) === normalizeTagNameKey(name));
   if (duplicate) {
-    throw new Error(`Tag "${name}" already exists.`);
+    return duplicate;
   }
 
   const payload = {
@@ -776,9 +1216,13 @@ export async function createTagInStore(input: { name: string; color?: string }):
     .select('id,name,color,created_at,updated_at')
     .single();
 
-  if (error) throw formatSupabaseError(error, 'Unable to create tag.');
+  if (error) {
+    const existing = await getTagByNameFromStore(name);
+    if (existing) return existing;
+    throw formatSupabaseError(error, 'Unable to create tag.');
+  }
 
-  await refreshTagsAndDispatch(false);
+  await refreshTagsAndDispatch();
   return mapTagRow(data as TagRow);
 }
 
@@ -814,15 +1258,20 @@ export async function updateTagInStore(id: string, updates: { name?: string; col
 
   if (error) throw formatSupabaseError(error, 'Unable to update tag.');
 
-  await refreshTagsAndDispatch(current.name !== nextName);
+  await refreshTagsAndDispatch({ alsoIssues: true, alsoLibraryResolutions: true });
   return mapTagRow(data as TagRow);
 }
 
 export async function deleteTagInStore(id: string): Promise<void> {
-  const rows = await fetchIssueRowsFromSupabase();
-  const affected = rows.filter(row => (row.tags ?? []).includes(id));
+  const [issueRows, resolutionRows] = await Promise.all([
+    fetchIssueRowsFromSupabase(),
+    fetchResolutionRowsFromSupabase(),
+  ]);
 
-  for (const row of affected) {
+  const affectedIssues = issueRows.filter(row => (row.tags ?? []).includes(id));
+  const affectedResolutions = resolutionRows.filter(row => (row.tags ?? []).includes(id));
+
+  for (const row of affectedIssues) {
     const nextTags = (row.tags ?? []).filter(tagId => tagId !== id);
     const { error } = await supabase
       .from('issues')
@@ -832,6 +1281,16 @@ export async function deleteTagInStore(id: string): Promise<void> {
     if (error) throw formatSupabaseError(error, 'Unable to remove deleted tag from issues.');
   }
 
+  for (const row of affectedResolutions) {
+    const nextTags = (row.tags ?? []).filter(tagId => tagId !== id);
+    const { error } = await supabase
+      .from('resolutions')
+      .update({ tags: nextTags })
+      .eq('id', row.id);
+
+    if (error) throw formatSupabaseError(error, 'Unable to remove deleted tag from resolutions.');
+  }
+
   const { error } = await supabase
     .from('tags')
     .delete()
@@ -839,19 +1298,17 @@ export async function deleteTagInStore(id: string): Promise<void> {
 
   if (error) throw formatSupabaseError(error, 'Unable to delete tag.');
 
-  await refreshTagsAndDispatch(affected.length > 0);
+  await refreshTagsAndDispatch({ alsoIssues: affectedIssues.length > 0, alsoLibraryResolutions: affectedResolutions.length > 0 });
 }
+
 export async function getAllIssuesFromStore(): Promise<Issue[]> {
   return fetchIssuesFromSupabase();
 }
 
 export async function getIssueByIdFromStore(id: string): Promise<Issue | undefined> {
-  const issues = await ensureIssuesLoaded();
-  const cached = issues.find(issue => issue.id === id);
+  const cached = issuesCache.find(issue => issue.id === id);
   if (cached) return cached;
-
-  const refreshed = await fetchIssuesFromSupabase();
-  return refreshed.find(issue => issue.id === id);
+  return fetchIssueFromSupabase(id);
 }
 
 export async function addIssueToStore(newIssue: Omit<Issue, 'id' | 'createdAt'>): Promise<Issue> {
@@ -860,17 +1317,17 @@ export async function addIssueToStore(newIssue: Omit<Issue, 'id' | 'createdAt'>)
   const { data, error } = await supabase
     .from('issues')
     .insert(payload)
-    .select('*')
+    .select('id')
     .single();
 
   if (error) throw formatSupabaseError(error, 'Unable to create issue.');
 
   await refreshIssuesAndDispatch();
-  const issue = issuesCache.find(item => item.id === (data as IssueRow).id);
-  if (!issue) {
+  const created = await fetchIssueFromSupabase((data as { id: string }).id);
+  if (!created) {
     throw new Error('Issue was created but could not be reloaded.');
   }
-  return issue;
+  return created;
 }
 
 export async function updateIssueInStore(id: string, updates: Partial<Issue>): Promise<Issue | undefined> {
@@ -878,17 +1335,15 @@ export async function updateIssueInStore(id: string, updates: Partial<Issue>): P
   if (!current) return undefined;
 
   const payload = await toIssueUpdateRow(current, updates);
-  const { data, error } = await supabase
+  const { error } = await supabase
     .from('issues')
     .update(payload)
-    .eq('id', id)
-    .select('*')
-    .single();
+    .eq('id', id);
 
   if (error) throw formatSupabaseError(error, 'Unable to update issue.');
 
   await refreshIssuesAndDispatch();
-  return issuesCache.find(item => item.id === (data as IssueRow).id);
+  return fetchIssueFromSupabase(id);
 }
 
 export async function deleteIssueFromStore(id: string): Promise<boolean> {
@@ -922,15 +1377,128 @@ export async function deleteIssueFromStore(id: string): Promise<boolean> {
   return true;
 }
 
-export async function addResolutionToStore(issueId: string, resolution: Omit<Resolution, 'id'>): Promise<Issue | undefined> {
-  const current = await getIssueByIdFromStore(issueId);
+export async function listLibraryResolutions(): Promise<Resolution[]> {
+  return fetchLibraryResolutionsFromSupabase();
+}
+export async function createLibraryResolution(resolution: Omit<Resolution, 'id'>): Promise<Resolution> {
+  const payload = await toResolutionInsertRow(null, resolution);
+
+  const { data, error } = await supabase
+    .from('resolutions')
+    .insert(payload)
+    .select('*')
+    .single();
+
+  if (error) throw formatSupabaseError(error, 'Unable to create library resolution.');
+
+  await refreshLibraryResolutionsAndDispatch();
+  const tags = await ensureTagsLoaded();
+  return mapResolutionRow(data as ResolutionRow, new Map(tags.map(tag => [tag.id, tag])));
+}
+
+export async function updateLibraryResolution(id: string, updates: Partial<Resolution>): Promise<Resolution | undefined> {
+  const current = (await ensureLibraryResolutionsLoaded()).find(resolution => resolution.id === id);
   if (!current) return undefined;
 
-  const nextResolutions = [...(current.resolutions ?? []), normalizeResolutionContent(resolution)];
-  return updateIssueInStore(issueId, {
-    resolutions: nextResolutions,
-    resolution: nextResolutions[0],
-  });
+  const payload = await toResolutionUpdateRow({ ...current, issueId: null }, { ...updates, issueId: null });
+  const { data, error } = await supabase
+    .from('resolutions')
+    .update(payload)
+    .eq('id', id)
+    .is('issue_id', null)
+    .select('*')
+    .maybeSingle();
+
+  if (error) throw formatSupabaseError(error, 'Unable to update library resolution.');
+  if (!data) return undefined;
+
+  await refreshLibraryResolutionsAndDispatch();
+  const tags = await ensureTagsLoaded();
+  return mapResolutionRow(data as ResolutionRow, new Map(tags.map(tag => [tag.id, tag])));
+}
+
+export async function deleteLibraryResolution(id: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('resolutions')
+    .delete()
+    .eq('id', id)
+    .is('issue_id', null);
+
+  if (error) throw formatSupabaseError(error, 'Unable to delete library resolution.');
+
+  await refreshLibraryResolutionsAndDispatch();
+  return true;
+}
+
+export async function listIssueResolutions(issueId: string): Promise<Resolution[]> {
+  const tags = await ensureTagsLoaded();
+  const rows = await fetchIssueResolutionRowsFromSupabase(issueId);
+  const tagMap = new Map(tags.map(tag => [tag.id, tag]));
+  return rows.map(row => mapResolutionRow(row, tagMap));
+}
+
+export async function addIssueResolution(issueId: string, resolution: Omit<Resolution, 'id'>): Promise<Resolution> {
+  const payload = await toResolutionInsertRow(issueId, resolution);
+
+  const { data, error } = await supabase
+    .from('resolutions')
+    .insert(payload)
+    .select('*')
+    .single();
+
+  if (error) throw formatSupabaseError(error, 'Unable to add issue resolution.');
+
+  await refreshIssuesAndDispatch();
+  const tags = await ensureTagsLoaded();
+  return mapResolutionRow(data as ResolutionRow, new Map(tags.map(tag => [tag.id, tag])));
+}
+
+export async function updateIssueResolution(id: string, updates: Partial<Resolution>): Promise<Resolution | undefined> {
+  const { data: currentRow, error: currentError } = await supabase
+    .from('resolutions')
+    .select('*')
+    .eq('id', id)
+    .not('issue_id', 'is', null)
+    .maybeSingle();
+
+  if (currentError) throw formatSupabaseError(currentError, 'Unable to load issue resolution.');
+  if (!currentRow) return undefined;
+
+  const tags = await ensureTagsLoaded();
+  const current = mapResolutionRow(currentRow as ResolutionRow, new Map(tags.map(tag => [tag.id, tag])));
+  const payload = await toResolutionUpdateRow(current, updates);
+
+  const { data, error } = await supabase
+    .from('resolutions')
+    .update(payload)
+    .eq('id', id)
+    .not('issue_id', 'is', null)
+    .select('*')
+    .maybeSingle();
+
+  if (error) throw formatSupabaseError(error, 'Unable to update issue resolution.');
+  if (!data) return undefined;
+
+  await refreshIssuesAndDispatch();
+  return mapResolutionRow(data as ResolutionRow, new Map(tags.map(tag => [tag.id, tag])));
+}
+
+export async function deleteIssueResolution(id: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('resolutions')
+    .delete()
+    .eq('id', id)
+    .not('issue_id', 'is', null);
+
+  if (error) throw formatSupabaseError(error, 'Unable to delete issue resolution.');
+
+  await refreshIssuesAndDispatch();
+  return true;
+}
+
+export async function addResolutionToStore(issueId: string, resolution: Omit<Resolution, 'id'>): Promise<Issue | undefined> {
+  await addIssueResolution(issueId, resolution);
+  return fetchIssueFromSupabase(issueId);
 }
 
 export async function updateResolutionInStore(
@@ -938,69 +1506,38 @@ export async function updateResolutionInStore(
   resolutionId: string,
   updates: Partial<Resolution>,
 ): Promise<Issue | undefined> {
-  const current = await getIssueByIdFromStore(issueId);
-  if (!current || !Array.isArray(current.resolutions)) return undefined;
-
-  let found = false;
-  const nextResolutions = current.resolutions.map(resolution => {
-    if (resolution.id !== resolutionId) return resolution;
-    found = true;
-    return normalizeResolutionContent({
-      ...resolution,
-      ...updates,
-      id: resolution.id,
-      createdAt: resolution.createdAt ?? nowIso(),
-      updatedAt: nowIso(),
-    });
-  });
-
-  if (!found) {
-    return undefined;
-  }
-
-  return updateIssueInStore(issueId, {
-    resolutions: nextResolutions,
-    resolution: nextResolutions[0],
-  });
+  const updated = await updateIssueResolution(resolutionId, updates);
+  if (!updated) return undefined;
+  return fetchIssueFromSupabase(issueId);
 }
 
 export async function deleteResolutionFromStore(issueId: string, resolutionId: string): Promise<Issue | undefined> {
-  const current = await getIssueByIdFromStore(issueId);
-  if (!current || !Array.isArray(current.resolutions)) return undefined;
-
-  const nextResolutions = current.resolutions.filter(resolution => resolution.id !== resolutionId);
-  if (nextResolutions.length === current.resolutions.length) {
-    return undefined;
-  }
-
-  return updateIssueInStore(issueId, {
-    resolutions: nextResolutions,
-    resolution: nextResolutions[0],
-  });
+  const deleted = await deleteIssueResolution(resolutionId);
+  if (!deleted) return undefined;
+  return fetchIssueFromSupabase(issueId);
 }
 
-export async function incrementIssueReferenceCount(issueId: string, resolutionId?: string): Promise<Issue | undefined> {
+export async function incrementIssueReferenceCount(issueId: string, _resolutionId?: string): Promise<Issue | undefined> {
   const current = await getIssueByIdFromStore(issueId);
   if (!current) return undefined;
 
-  const nextResolutions = Array.isArray(current.resolutions)
-    ? current.resolutions.map(resolution => (
-        resolution.id === resolutionId
-          ? { ...resolution, referenceCount: (resolution.referenceCount ?? 0) + 1 }
-          : resolution
-      ))
-    : current.resolutions;
+  const { error } = await supabase
+    .from('issues')
+    .update({
+      reference_count: (current.referenceCount ?? 0) + 1,
+    })
+    .eq('id', issueId);
 
-  return updateIssueInStore(issueId, {
-    referenceCount: (current.referenceCount ?? 0) + 1,
-    resolutions: nextResolutions,
-    resolution: normalizeSingleResolution(current.resolution, nextResolutions),
-  });
+  if (error) throw formatSupabaseError(error, 'Unable to update issue reference count.');
+
+  await refreshIssuesAndDispatch();
+  return fetchIssueFromSupabase(issueId);
 }
 
 export async function promoteIssueToMaster(issueId: string): Promise<Issue | undefined> {
   return updateIssueInStore(issueId, { isMasterIncident: true });
 }
+
 export async function demoteIssueFromMaster(issueId: string): Promise<Issue | undefined> {
   const rows = await fetchIssueRowsFromSupabase();
   const dependents = rows.filter(row => row.master_incident_id === issueId);
@@ -1097,8 +1634,7 @@ export async function getRelationshipsForMasterFromStore(masterId: string): Prom
 }
 
 export async function getRelationshipForSourceFromStore(sourceId: string): Promise<IssueRelationship | undefined> {
-  const rows = await fetchIssueRowsFromSupabase();
-  const row = rows.find(item => item.id === sourceId && item.master_incident_id);
+  const row = await fetchIssueRowByIdFromSupabase(sourceId);
   if (!row || !row.master_incident_id || !row.relationship_type) return undefined;
 
   return {

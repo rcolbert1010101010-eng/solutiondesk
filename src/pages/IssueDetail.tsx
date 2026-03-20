@@ -396,18 +396,23 @@ export const IssueDetail: React.FC = () => {
   const handleAddResolution = async () => {
     const steps = stepsHtmlToLines(resolutionForm.stepsHtml);
     if (!id || steps.length === 0) return;
-    const notesText = resolutionForm.notesText.trim();
-    const notesHtml = resolutionForm.notesHtml.trim();
-    const stepsHtml = resolutionForm.stepsHtml.trim();
-    await addResolution(id, {
-      stepsHtml,
-      steps,
-      notes: notesText ? notesHtml : undefined,
-      notesText: notesText || undefined
-    });
-    setResolutionForm({ stepsHtml: '<p></p>', notesHtml: '<p></p>', notesText: '' });
-    setShowResolutionForm(false);
-    await loadIssue();
+    setActionError('');
+    try {
+      const notesText = resolutionForm.notesText.trim();
+      const notesHtml = resolutionForm.notesHtml.trim();
+      const stepsHtml = resolutionForm.stepsHtml.trim();
+      await addResolution(id, {
+        stepsHtml,
+        steps,
+        notes: notesText ? notesHtml : undefined,
+        notesText: notesText || undefined
+      });
+      setResolutionForm({ stepsHtml: '<p></p>', notesHtml: '<p></p>', notesText: '' });
+      setShowResolutionForm(false);
+      await loadIssue();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Unable to add resolution.');
+    }
   };
 
   const startResolutionEdit = (resolution: Resolution) => {
@@ -434,34 +439,42 @@ export const IssueDetail: React.FC = () => {
     if (!id || !editingResolutionId) return;
     const steps = stepsHtmlToLines(resolutionEditForm.stepsHtml);
     if (steps.length === 0) return;
+    setActionError('');
+    try {
+      const notesText = resolutionEditForm.notesText.trim();
+      const notesHtml = resolutionEditForm.notesHtml.trim();
+      const updated = await updateResolution(id, editingResolutionId, {
+        stepsHtml: resolutionEditForm.stepsHtml.trim(),
+        steps,
+        notes: notesText ? notesHtml : undefined,
+        notesText: notesText || undefined,
+      });
 
-    const notesText = resolutionEditForm.notesText.trim();
-    const notesHtml = resolutionEditForm.notesHtml.trim();
-    const updated = await updateResolution(id, editingResolutionId, {
-      stepsHtml: resolutionEditForm.stepsHtml.trim(),
-      steps,
-      notes: notesText ? notesHtml : undefined,
-      notesText: notesText || undefined,
-    });
-
-    if (!updated) return;
-    setIssue(updated);
-    setAllIssues(await getAllIssues());
-    cancelResolutionEdit();
+      if (!updated) return;
+      setIssue(updated);
+      setAllIssues(await getAllIssues());
+      cancelResolutionEdit();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Unable to update resolution.');
+    }
   };
 
   const handleDeleteResolution = async (resolutionId: string) => {
     if (!id) return;
     const confirmed = window.confirm('Delete this resolution?');
     if (!confirmed) return;
+    setActionError('');
+    try {
+      const updated = await deleteResolution(id, resolutionId);
+      if (!updated) return;
+      setIssue(updated);
+      setAllIssues(await getAllIssues());
 
-    const updated = await deleteResolution(id, resolutionId);
-    if (!updated) return;
-    setIssue(updated);
-    setAllIssues(await getAllIssues());
-
-    if (editingResolutionId === resolutionId) {
-      cancelResolutionEdit();
+      if (editingResolutionId === resolutionId) {
+        cancelResolutionEdit();
+      }
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Unable to delete resolution.');
     }
   };
 
@@ -512,8 +525,13 @@ export const IssueDetail: React.FC = () => {
 
   const handleIncrementReference = async (resolutionId: string) => {
     if (!id) return;
-    await incrementReferenceCount(id, resolutionId);
-    await loadIssue();
+    setActionError('');
+    try {
+      await incrementReferenceCount(id, resolutionId);
+      await loadIssue();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Unable to update reference count.');
+    }
   };
 
   const toggleTag = (tag: TagReference) => {
