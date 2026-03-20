@@ -234,6 +234,7 @@ export const IssueDetail: React.FC = () => {
   const [editing, setEditing] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [actionError, setActionError] = useState('');
   const [showResolutionForm, setShowResolutionForm] = useState(false);
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [linkedRelationships, setLinkedRelationships] = useState<IssueRelationship[]>([]);
@@ -344,35 +345,46 @@ export const IssueDetail: React.FC = () => {
 
   const handleSave = async () => {
     if (!id) return;
-    await updateIssue(id, {
-      title: editForm.title,
-      description: editForm.descriptionText,
-      descriptionText: editForm.descriptionText,
-      descriptionHtml: editForm.descriptionHtml,
-      systemAffected: editForm.systemAffected,
-      severity: editForm.severity,
-      status: editForm.status,
-      assignee: editForm.assignee || undefined,
-      tags: editForm.tags
-    });
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 2000);
-    setEditing(false);
-    await loadIssue();
+    setActionError('');
+    try {
+      await updateIssue(id, {
+        title: editForm.title,
+        description: editForm.descriptionText,
+        descriptionText: editForm.descriptionText,
+        descriptionHtml: editForm.descriptionHtml,
+        systemAffected: editForm.systemAffected,
+        severity: editForm.severity,
+        status: editForm.status,
+        assignee: editForm.assignee || undefined,
+        tags: editForm.tags
+      });
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 2000);
+      setEditing(false);
+      await loadIssue();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Unable to update issue.');
+    }
   };
 
   const handleInlineStatusChange = async (nextStatus: Status) => {
     if (!id || !issue || nextStatus === issue.status) return;
+    setActionError('');
     setInlineStatusSaving(true);
-    const updated = await updateIssue(id, { status: nextStatus });
-    if (updated) {
-      setIssue(updated);
-      setEditForm(prev => ({ ...prev, status: nextStatus }));
-      setAllIssues(await getAllIssues());
-      setInlineStatusSaved(true);
-      setTimeout(() => setInlineStatusSaved(false), 1200);
+    try {
+      const updated = await updateIssue(id, { status: nextStatus });
+      if (updated) {
+        setIssue(updated);
+        setEditForm(prev => ({ ...prev, status: nextStatus }));
+        setAllIssues(await getAllIssues());
+        setInlineStatusSaved(true);
+        setTimeout(() => setInlineStatusSaved(false), 1200);
+      }
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Unable to update issue status.');
+    } finally {
+      setInlineStatusSaving(false);
     }
-    setInlineStatusSaving(false);
   };
 
   const handleDelete = async () => {
@@ -632,6 +644,12 @@ export const IssueDetail: React.FC = () => {
             )}
           </div>
         </div>
+
+        {actionError && (
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-600 dark:border-red-500/25 dark:bg-red-500/10 dark:text-red-300">
+            {actionError}
+          </div>
+        )}
 
         {saveSuccess && (
           <div className="mb-4 px-4 py-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm flex items-center gap-2">

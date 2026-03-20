@@ -9,6 +9,13 @@ export const RELATIONSHIPS_STORAGE_KEY = 'resolution_desk_relationships';
 export const TAGS_CHANGED_EVENT = 'resolution_desk_tags_changed';
 export const ISSUES_CHANGED_EVENT = 'resolution_desk_issues_changed';
 
+const LEGACY_STORAGE_KEYS = [
+  TAGS_STORAGE_KEY,
+  ISSUES_STORAGE_KEY,
+  RELATIONSHIPS_STORAGE_KEY,
+  'issues_db',
+] as const;
+
 const HEX_COLOR_REGEX = /^#[0-9a-fA-F]{6}$/;
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -77,6 +84,28 @@ interface IssueWriteShape extends Partial<Issue> {
   confidenceScore?: number;
 }
 
+function toIssueRowPayload(input: Partial<Issue> | any): Record<string, any> {
+  return {
+    title: input.title ?? '',
+    description_html: ('descriptionHtml' in input ? input.descriptionHtml : input.description_html) ?? null,
+    description_text: ('descriptionText' in input ? input.descriptionText : input.description_text) ?? null,
+    status: input.status ?? null,
+    severity: input.severity ?? null,
+    confidence: input.confidence ?? null,
+    tags: Array.isArray(input.tags) ? input.tags : [],
+    assignee: input.assignee ?? null,
+    confidence_score: ('confidenceScore' in input ? input.confidenceScore : input.confidence_score) ?? null,
+    is_master_incident: ('isMasterIncident' in input ? input.isMasterIncident : input.is_master_incident) ?? false,
+    master_incident_id: ('masterIncidentId' in input ? input.masterIncidentId : input.master_incident_id) ?? null,
+    relationship_type: ('relationshipType' in input ? input.relationshipType : input.relationship_type) ?? null,
+    linked_at: ('linkedAt' in input ? input.linkedAt : input.linked_at) ?? null,
+    last_linked_at: ('lastLinkedAt' in input ? input.lastLinkedAt : input.last_linked_at) ?? null,
+    linked_incident_count: ('linkedIncidentCount' in input ? input.linkedIncidentCount : input.linked_incident_count) ?? 0,
+    reference_count: ('referenceCount' in input ? input.referenceCount : input.reference_count) ?? 0,
+    legacy_id: ('legacyId' in input ? input.legacyId : input.legacy_id) ?? null,
+  };
+}
+
 let bootstrapPromise: Promise<void> | null = null;
 let tagsCache: Tag[] = [];
 let issuesCache: Issue[] = [];
@@ -91,6 +120,24 @@ function dispatchWindowEvent(eventName: string): void {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new Event(eventName));
   }
+}
+
+function clearLegacyLocalStorage(): void {
+  if (typeof window === 'undefined') return;
+  for (const key of LEGACY_STORAGE_KEYS) {
+    try {
+      window.localStorage.removeItem(key);
+    } catch {
+      // ignore storage cleanup failures
+    }
+  }
+}
+
+function formatSupabaseError(error: unknown, fallback: string): Error {
+  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string' && error.message.trim()) {
+    return new Error(error.message.trim());
+  }
+  return new Error(fallback);
 }
 
 function normalizeName(name: string): string {
@@ -268,30 +315,42 @@ function getCachedTagByName(name: string): Tag | undefined {
 }
 
 async function fetchTagsFromSupabase(): Promise<Tag[]> {
-  await ensureSupabaseBootstrap();
+  try {
+    await ensureSupabaseBootstrap();
 
-  const { data, error } = await supabase
-    .from('tags')
-    .select('id,name,color,created_at,updated_at')
-    .order('name', { ascending: true });
+    const { data, error } = await supabase
+      .from('tags')
+      .select('id,name,color,created_at,updated_at')
+      .order('name', { ascending: true });
 
-  if (error) throw error;
+    if (error) throw error;
 
-  tagsCache = sortTags((data ?? []).map(row => mapTagRow(row as TagRow)));
-  tagsLoaded = true;
-  return [...tagsCache];
+    tagsCache = sortTags((data ?? []).map(row => mapTagRow(row as TagRow)));
+    tagsLoaded = true;
+    return [...tagsCache];
+  } catch (error) {
+    console.error('Unable to load tags from Supabase.', error);
+    tagsCache = [];
+    tagsLoaded = true;
+    return [];
+  }
 }
 
 async function fetchIssueRowsFromSupabase(): Promise<IssueRow[]> {
-  await ensureSupabaseBootstrap();
+  try {
+    await ensureSupabaseBootstrap();
 
-  const { data, error } = await supabase
-    .from('issues')
-    .select('*')
-    .order('created_at', { ascending: false });
+    const { data, error } = await supabase
+      .from('issues')
+      .select('*')
+      .order('updated_at', { ascending: false });
 
-  if (error) throw error;
-  return (data ?? []) as IssueRow[];
+    if (error) throw error;
+    return (data ?? []) as IssueRow[];
+  } catch (error) {
+    console.error('Unable to load issues from Supabase.', error);
+    return [];
+  }
 }
 
 async function fetchIssuesFromSupabase(): Promise<Issue[]> {
@@ -476,6 +535,7 @@ async function migrateLegacyLocalStorageToSupabase(): Promise<void> {
   const issueCount = issueCountResult.count ?? 0;
 
   if (tagCount > 0 || issueCount > 0) {
+    clearLegacyLocalStorage();
     return;
   }
 
@@ -584,6 +644,9 @@ async function migrateLegacyLocalStorageToSupabase(): Promise<void> {
     const { error } = await supabase.from('issues').insert(migratedIssues);
     if (error) throw error;
   }
+
+  clearLegacyLocalStorage();
+  console.info('SolutionDesk localStorage data migrated to Supabase.');
 }
 
 async function ensureSupabaseBootstrap(): Promise<void> {
@@ -644,51 +707,21 @@ async function toIssueInsertRow(issue: Omit<Issue, 'id' | 'createdAt'>): Promise
     throw new Error('Issue title is required.');
   }
 
-  return {
-    legacy_id: null,
-    title: normalized.title,
-    description_html: normalized.descriptionHtml ?? null,
-    description_text: normalized.descriptionText ?? null,
-    system_affected: normalized.systemAffected,
-    status: normalized.status,
-    severity: normalized.severity,
-    confidence: null,
-    assignee: normalized.assignee ?? null,
+  return toIssueRowPayload({
+    ...normalized,
     tags: await resolveTagIds(normalized.tags),
-    resolution: normalized.resolution ?? null,
-    resolutions: normalized.resolutions ?? [],
-    is_master_incident: Boolean(normalized.isMasterIncident),
-    master_incident_id: normalized.masterIncidentId ?? null,
-    relationship_type: null,
-    linked_at: null,
-    linked_incident_count: normalized.linkedIncidentCount ?? 0,
-    last_linked_at: normalized.lastLinkedAt ?? null,
-    reference_count: normalized.referenceCount ?? 0,
-    confidence_score: normalized.confidenceScore ?? null,
-  };
+    confidence: null,
+    legacyId: null,
+  }) as Omit<IssueRow, 'id' | 'created_at' | 'updated_at'>;
 }
 
 async function toIssueUpdateRow(current: Issue, updates: Partial<Issue>): Promise<Partial<IssueRow>> {
   const normalized = toIssueWriteShape(current, updates);
 
-  return {
-    title: normalized.title,
-    description_html: normalized.descriptionHtml ?? null,
-    description_text: normalized.descriptionText ?? null,
-    system_affected: normalized.systemAffected,
-    status: normalized.status,
-    severity: normalized.severity,
-    assignee: normalized.assignee ?? null,
+  return toIssueRowPayload({
+    ...normalized,
     tags: await resolveTagIds(normalized.tags),
-    resolution: normalized.resolution ?? null,
-    resolutions: normalized.resolutions ?? [],
-    is_master_incident: Boolean(normalized.isMasterIncident),
-    master_incident_id: normalized.masterIncidentId ?? null,
-    linked_incident_count: normalized.linkedIncidentCount ?? 0,
-    last_linked_at: normalized.lastLinkedAt ?? null,
-    reference_count: normalized.referenceCount ?? 0,
-    confidence_score: normalized.confidenceScore ?? null,
-  };
+  }) as Partial<IssueRow>;
 }
 
 async function refreshTagsAndDispatch(alsoIssues = false): Promise<void> {
@@ -743,7 +776,7 @@ export async function createTagInStore(input: { name: string; color?: string }):
     .select('id,name,color,created_at,updated_at')
     .single();
 
-  if (error) throw error;
+  if (error) throw formatSupabaseError(error, 'Unable to create tag.');
 
   await refreshTagsAndDispatch(false);
   return mapTagRow(data as TagRow);
@@ -779,7 +812,7 @@ export async function updateTagInStore(id: string, updates: { name?: string; col
     .select('id,name,color,created_at,updated_at')
     .single();
 
-  if (error) throw error;
+  if (error) throw formatSupabaseError(error, 'Unable to update tag.');
 
   await refreshTagsAndDispatch(current.name !== nextName);
   return mapTagRow(data as TagRow);
@@ -796,7 +829,7 @@ export async function deleteTagInStore(id: string): Promise<void> {
       .update({ tags: nextTags })
       .eq('id', row.id);
 
-    if (error) throw error;
+    if (error) throw formatSupabaseError(error, 'Unable to remove deleted tag from issues.');
   }
 
   const { error } = await supabase
@@ -804,7 +837,7 @@ export async function deleteTagInStore(id: string): Promise<void> {
     .delete()
     .eq('id', id);
 
-  if (error) throw error;
+  if (error) throw formatSupabaseError(error, 'Unable to delete tag.');
 
   await refreshTagsAndDispatch(affected.length > 0);
 }
@@ -830,7 +863,7 @@ export async function addIssueToStore(newIssue: Omit<Issue, 'id' | 'createdAt'>)
     .select('*')
     .single();
 
-  if (error) throw error;
+  if (error) throw formatSupabaseError(error, 'Unable to create issue.');
 
   await refreshIssuesAndDispatch();
   const issue = issuesCache.find(item => item.id === (data as IssueRow).id);
@@ -852,7 +885,7 @@ export async function updateIssueInStore(id: string, updates: Partial<Issue>): P
     .select('*')
     .single();
 
-  if (error) throw error;
+  if (error) throw formatSupabaseError(error, 'Unable to update issue.');
 
   await refreshIssuesAndDispatch();
   return issuesCache.find(item => item.id === (data as IssueRow).id);
@@ -875,7 +908,7 @@ export async function deleteIssueFromStore(id: string): Promise<boolean> {
       })
       .eq('id', row.id);
 
-    if (error) throw error;
+    if (error) throw formatSupabaseError(error, 'Unable to clear linked issues before delete.');
   }
 
   const { error } = await supabase
@@ -883,7 +916,7 @@ export async function deleteIssueFromStore(id: string): Promise<boolean> {
     .delete()
     .eq('id', id);
 
-  if (error) throw error;
+  if (error) throw formatSupabaseError(error, 'Unable to delete issue.');
 
   await refreshIssuesAndDispatch();
   return true;
@@ -982,7 +1015,7 @@ export async function demoteIssueFromMaster(issueId: string): Promise<Issue | un
       })
       .eq('id', row.id);
 
-    if (error) throw error;
+    if (error) throw formatSupabaseError(error, 'Unable to demote master incident.');
   }
 
   return updateIssueInStore(issueId, {
@@ -1011,7 +1044,7 @@ export async function linkIssueToMasterInStore(
     })
     .eq('id', sourceId);
 
-  if (error) throw error;
+  if (error) throw formatSupabaseError(error, 'Unable to link issue to master incident.');
 
   if (!master.isMasterIncident) {
     const { error: promoteError } = await supabase
@@ -1019,7 +1052,7 @@ export async function linkIssueToMasterInStore(
       .update({ is_master_incident: true })
       .eq('id', masterId);
 
-    if (promoteError) throw promoteError;
+    if (promoteError) throw formatSupabaseError(promoteError, 'Unable to promote master incident.');
   }
 
   await refreshIssuesAndDispatch();
@@ -1044,7 +1077,7 @@ export async function unlinkIssueInStore(sourceId: string): Promise<boolean> {
     })
     .eq('id', sourceId);
 
-  if (error) throw error;
+  if (error) throw formatSupabaseError(error, 'Unable to unlink issue.');
 
   await refreshIssuesAndDispatch();
   return true;

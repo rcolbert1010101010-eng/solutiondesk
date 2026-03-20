@@ -25,12 +25,24 @@ export async function getAllIssues(): Promise<Issue[]> {
   return getAllIssuesFromStore();
 }
 
+export async function listIssues(): Promise<Issue[]> {
+  return getAllIssues();
+}
+
 export async function getIssueById(id: string): Promise<Issue | undefined> {
   return getIssueByIdFromStore(id);
 }
 
+export async function getIssue(id: string): Promise<Issue | undefined> {
+  return getIssueById(id);
+}
+
 export async function addIssue(newIssue: Omit<Issue, 'id' | 'createdAt'>): Promise<Issue> {
   return addIssueToStore(newIssue);
+}
+
+export async function createIssue(newIssue: Omit<Issue, 'id' | 'createdAt'>): Promise<Issue> {
+  return addIssue(newIssue);
 }
 
 export async function updateIssue(id: string, updates: Partial<Issue>): Promise<Issue | undefined> {

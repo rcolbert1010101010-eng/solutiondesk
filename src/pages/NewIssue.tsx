@@ -37,6 +37,7 @@ export const NewIssue: React.FC = () => {
   const [quickTagMessageTone, setQuickTagMessageTone] = useState<'info' | 'success' | 'error'>('info');
   const [assignee, setAssignee] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   // Semantic suggestions
@@ -147,9 +148,11 @@ export const NewIssue: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitError('');
     if (!validate()) return;
     setSubmitting(true);
-    setTimeout(async () => {
+    try {
+      await new Promise(resolve => setTimeout(resolve, 300));
       const newIssue = await addIssue({
         title: title.trim(),
         description: descriptionText.trim(),
@@ -162,7 +165,11 @@ export const NewIssue: React.FC = () => {
         tags: selectedTags,
       });
       navigate(`/issues/${newIssue.id}`);
-    }, 300);
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'Unable to create issue.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleSelectSuggestion = (issueId: string) => {
@@ -348,6 +355,10 @@ export const NewIssue: React.FC = () => {
             </div>
 
             {/* Submit */}
+            {submitError && (
+              <p className="text-sm text-red-500">{submitError}</p>
+            )}
+
             <div className="flex gap-3 pt-2">
               <button
                 type="submit"
