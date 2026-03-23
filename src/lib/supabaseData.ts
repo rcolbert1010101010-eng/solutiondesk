@@ -1569,6 +1569,41 @@ export async function listLibraryResolutions(): Promise<Resolution[]> {
   libraryResolutionsLoaded = true;
   return [...libraryResolutionsCache];
 }
+
+export async function getResolutionById(id: string): Promise<Resolution | undefined> {
+  const [{ data, error }, tags, issues] = await Promise.all([
+    supabase
+      .from('resolutions')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle(),
+    fetchTagsFromSupabase(),
+    fetchIssueRowsFromSupabase(),
+  ]);
+
+  if (error) throw formatSupabaseError(error, 'Unable to load resolution.');
+  if (!data) return undefined;
+
+  const row = data as ResolutionRow;
+  const tagMap = new Map(tags.map(tag => [tag.id, tag]));
+  const issueTitleById = new Map(issues.map(issue => [issue.id, issue.title]));
+  const resolution = mapResolutionRow(row, tagMap);
+
+  if (row.issue_id) {
+    return {
+      ...resolution,
+      sourceType: 'issue',
+      sourceIssueId: row.issue_id,
+      sourceIssueTitle: issueTitleById.get(row.issue_id) ?? 'Issue',
+    };
+  }
+
+  return {
+    ...resolution,
+    sourceType: 'library',
+  };
+}
+
 export async function createLibraryResolution(resolution: Omit<Resolution, 'id'>): Promise<Resolution> {
   const payload = await toResolutionInsertRow(null, resolution);
 

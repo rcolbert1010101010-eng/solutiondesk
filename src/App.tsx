@@ -5,6 +5,7 @@ import { Dashboard } from './pages/Dashboard';
 import { Issues } from './pages/Issues';
 import { NewIssue } from './pages/NewIssue';
 import { IssueDetail } from './pages/IssueDetail';
+import { ResolutionDetail } from './pages/ResolutionDetail';
 import { ResolutionLibrary } from './pages/ResolutionLibrary';
 import { LoginPage } from './pages/LoginPage';
 import { Tags } from './pages/Tags';
@@ -43,6 +44,7 @@ const AppShell: React.FC = () => {
           <Route path="/" element={<Dashboard />} />
           <Route path="/issues" element={<Issues />} />
           <Route path="/issues/:id" element={<IssueDetail />} />
+          <Route path="/resolutions/:id" element={<ResolutionDetail />} />
           <Route path="/new-issue" element={<NewIssue />} />
           <Route path="/tags" element={<Tags />} />
           <Route path="/resolution-library" element={<ResolutionLibrary />} />

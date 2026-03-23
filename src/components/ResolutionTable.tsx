@@ -1,12 +1,14 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Pencil, Trash2 } from 'lucide-react';
+import { ExternalLink, Eye, Pencil, Trash2 } from 'lucide-react';
 import type { Resolution } from '../types';
 import { TagBadge } from './TagBadge';
 import { SanitizedHtmlContent } from './RichTextEditor';
 import { useTheme } from '../context/ThemeContext';
 import {
+  getResolutionDetailPath,
   getResolutionPreviewText,
+  getResolutionSourceLabel,
   getResolutionStepsHtml,
   getResolutionTitle,
   getResolutionUpdatedAt,
@@ -16,11 +18,12 @@ import { formatRelativeTime } from '../lib/utils';
 
 interface ResolutionTableProps {
   resolutions: Resolution[];
+  onPreview: (resolution: Resolution) => void;
   onEdit: (resolution: Resolution) => void;
   onDelete: (id: string) => void;
 }
 
-export const ResolutionTable: React.FC<ResolutionTableProps> = ({ resolutions, onEdit, onDelete }) => {
+export const ResolutionTable: React.FC<ResolutionTableProps> = ({ resolutions, onPreview, onEdit, onDelete }) => {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
 
@@ -34,7 +37,7 @@ export const ResolutionTable: React.FC<ResolutionTableProps> = ({ resolutions, o
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[860px]">
+      <table className="w-full min-w-[980px]">
         <thead>
           <tr className={`border-b ${isDark ? 'border-zinc-800' : 'border-slate-200'}`}>
             <th className={`text-left text-xs font-medium uppercase tracking-wider pb-3 px-4 ${isDark ? 'text-zinc-500' : 'text-slate-400'}`}>Title</th>
@@ -49,6 +52,7 @@ export const ResolutionTable: React.FC<ResolutionTableProps> = ({ resolutions, o
             const libraryResolution = isLibraryResolution(resolution);
             const preview = getResolutionPreviewText(resolution);
             const stepsHtml = getResolutionStepsHtml(resolution, 3);
+            const detailPath = getResolutionDetailPath(resolution);
 
             return (
               <tr
@@ -99,7 +103,7 @@ export const ResolutionTable: React.FC<ResolutionTableProps> = ({ resolutions, o
                         ? 'border-violet-500/30 bg-violet-500/10 text-violet-400'
                         : 'border-blue-500/30 bg-blue-500/10 text-blue-400'
                     }`}>
-                      {libraryResolution ? 'Library' : 'From Issue'}
+                      {getResolutionSourceLabel(resolution)}
                     </span>
                     {!libraryResolution && resolution.sourceIssueId && (
                       <Link
@@ -112,28 +116,47 @@ export const ResolutionTable: React.FC<ResolutionTableProps> = ({ resolutions, o
                   </div>
                 </td>
                 <td className="py-3.5 px-4">
-                  {libraryResolution && resolution.id ? (
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => onEdit(resolution)}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => onPreview(resolution)}
+                      className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                    >
+                      <Eye size={11} />
+                      Preview
+                    </button>
+                    {detailPath && (
+                      <Link
+                        to={detailPath}
                         className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
                       >
-                        <Pencil size={11} />
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onDelete(resolution.id as string)}
-                        className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-red-500/30 bg-red-500/10 text-red-500 hover:bg-red-500/20"
-                      >
-                        <Trash2 size={11} />
-                        Delete
-                      </button>
-                    </div>
-                  ) : (
-                    <span className={`text-xs ${isDark ? 'text-zinc-600' : 'text-slate-400'}`}>Managed from issue</span>
-                  )}
+                        <ExternalLink size={11} />
+                        Open
+                      </Link>
+                    )}
+                    {libraryResolution && resolution.id ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => onEdit(resolution)}
+                          className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                        >
+                          <Pencil size={11} />
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onDelete(resolution.id as string)}
+                          className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-red-500/30 bg-red-500/10 text-red-500 hover:bg-red-500/20"
+                        >
+                          <Trash2 size={11} />
+                          Delete
+                        </button>
+                      </>
+                    ) : (
+                      <span className={`text-xs ${isDark ? 'text-zinc-600' : 'text-slate-400'}`}>Managed from issue</span>
+                    )}
+                  </div>
                 </td>
               </tr>
             );

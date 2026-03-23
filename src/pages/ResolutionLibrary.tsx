@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { BookOpen, LayoutGrid, List, Plus, Save, Search, SlidersHorizontal, Tag as TagIcon, X } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { RichTextEditor } from '../components/RichTextEditor';
 import { ResolutionCard } from '../components/ResolutionCard';
+import { ResolutionPreviewDialog } from '../components/ResolutionPreviewDialog';
 import { ResolutionTable } from '../components/ResolutionTable';
 import { TagBadge } from '../components/TagBadge';
 import { plainTextToHtml } from '../lib/richText';
@@ -43,6 +45,7 @@ type ViewMode = 'table' | 'grid';
 type SourceFilter = 'All' | 'Library' | 'From Issue';
 
 export const ResolutionLibrary: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [resolutions, setResolutions] = useState<Resolution[]>([]);
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
   const [search, setSearch] = useState('');
@@ -55,6 +58,7 @@ export const ResolutionLibrary: React.FC = () => {
   const [form, setForm] = useState<ResolutionFormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [previewingResolution, setPreviewingResolution] = useState<Resolution | null>(null);
   const [quickTagInput, setQuickTagInput] = useState('');
   const [quickTagMessage, setQuickTagMessage] = useState('');
   const [quickTagMessageTone, setQuickTagMessageTone] = useState<'info' | 'success' | 'error'>('info');
@@ -146,6 +150,22 @@ export const ResolutionLibrary: React.FC = () => {
     setQuickTagMessage('');
     setShowForm(true);
   };
+
+  useEffect(() => {
+    const requestedEditId = searchParams.get('edit');
+    if (!requestedEditId) return;
+
+    const requestedResolution = resolutions.find(resolution => (
+      resolution.id === requestedEditId && resolution.sourceType !== 'issue'
+    ));
+    if (!requestedResolution) return;
+
+    startEdit(requestedResolution);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('edit');
+    setSearchParams(nextParams, { replace: true });
+    window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
+  }, [resolutions, searchParams, setSearchParams]);
 
   const toggleTag = (tagName: string) => {
     setForm(current => ({
@@ -524,6 +544,7 @@ export const ResolutionLibrary: React.FC = () => {
           {viewMode === 'table' ? (
             <ResolutionTable
               resolutions={filteredResolutions}
+              onPreview={setPreviewingResolution}
               onEdit={startEdit}
               onDelete={handleDelete}
             />
@@ -533,6 +554,7 @@ export const ResolutionLibrary: React.FC = () => {
                 <ResolutionCard
                   key={resolution.id ?? `${resolution.title}-${getResolutionUpdatedAt(resolution)}`}
                   resolution={resolution}
+                  onPreview={setPreviewingResolution}
                   onEdit={startEdit}
                   onDelete={handleDelete}
                 />
@@ -548,6 +570,11 @@ export const ResolutionLibrary: React.FC = () => {
           )}
         </div>
       </div>
+
+      <ResolutionPreviewDialog
+        resolution={previewingResolution}
+        onClose={() => setPreviewingResolution(null)}
+      />
     </div>
   );
 };

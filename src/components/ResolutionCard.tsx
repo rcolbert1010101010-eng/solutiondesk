@@ -1,12 +1,14 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Clock, Pencil, Trash2 } from 'lucide-react';
+import { Clock, ExternalLink, Eye, Pencil, Trash2 } from 'lucide-react';
 import type { Resolution } from '../types';
 import { SanitizedHtmlContent } from './RichTextEditor';
 import { TagBadge } from './TagBadge';
 import { useTheme } from '../context/ThemeContext';
 import {
+  getResolutionDetailPath,
   getResolutionPreviewText,
+  getResolutionSourceLabel,
   getResolutionStepsHtml,
   getResolutionTitle,
   getResolutionUpdatedAt,
@@ -16,16 +18,18 @@ import { formatRelativeTime } from '../lib/utils';
 
 interface ResolutionCardProps {
   resolution: Resolution;
+  onPreview: (resolution: Resolution) => void;
   onEdit: (resolution: Resolution) => void;
   onDelete: (id: string) => void;
 }
 
-export const ResolutionCard: React.FC<ResolutionCardProps> = ({ resolution, onEdit, onDelete }) => {
+export const ResolutionCard: React.FC<ResolutionCardProps> = ({ resolution, onPreview, onEdit, onDelete }) => {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const libraryResolution = isLibraryResolution(resolution);
   const preview = getResolutionPreviewText(resolution);
   const stepsHtml = getResolutionStepsHtml(resolution, 3);
+  const detailPath = getResolutionDetailPath(resolution);
 
   return (
     <div
@@ -43,7 +47,7 @@ export const ResolutionCard: React.FC<ResolutionCardProps> = ({ resolution, onEd
                 ? 'border-violet-500/30 bg-violet-500/10 text-violet-400'
                 : 'border-blue-500/30 bg-blue-500/10 text-blue-400'
             }`}>
-              {libraryResolution ? 'Library' : 'From Issue'}
+              {getResolutionSourceLabel(resolution)}
             </span>
             {!libraryResolution && resolution.sourceIssueId && (
               <Link
@@ -89,28 +93,47 @@ export const ResolutionCard: React.FC<ResolutionCardProps> = ({ resolution, onEd
         <span className={`text-xs ${isDark ? 'text-zinc-600' : 'text-slate-400'}`}>
           {libraryResolution ? 'Reusable library item' : 'Linked to an issue resolution'}
         </span>
-        {libraryResolution && resolution.id ? (
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => onEdit(resolution)}
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          <button
+            type="button"
+            onClick={() => onPreview(resolution)}
+            className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+          >
+            <Eye size={11} />
+            Preview
+          </button>
+          {detailPath && (
+            <Link
+              to={detailPath}
               className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
             >
-              <Pencil size={11} />
-              Edit
-            </button>
-            <button
-              type="button"
-              onClick={() => onDelete(resolution.id as string)}
-              className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-red-500/30 bg-red-500/10 text-red-500 hover:bg-red-500/20"
-            >
-              <Trash2 size={11} />
-              Delete
-            </button>
-          </div>
-        ) : (
-          <span className={`text-xs ${isDark ? 'text-zinc-600' : 'text-slate-400'}`}>Managed from issue</span>
-        )}
+              <ExternalLink size={11} />
+              Open
+            </Link>
+          )}
+          {libraryResolution && resolution.id ? (
+            <>
+              <button
+                type="button"
+                onClick={() => onEdit(resolution)}
+                className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+              >
+                <Pencil size={11} />
+                Edit
+              </button>
+              <button
+                type="button"
+                onClick={() => onDelete(resolution.id as string)}
+                className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-red-500/30 bg-red-500/10 text-red-500 hover:bg-red-500/20"
+              >
+                <Trash2 size={11} />
+                Delete
+              </button>
+            </>
+          ) : (
+            <span className={`text-xs ${isDark ? 'text-zinc-600' : 'text-slate-400'}`}>Managed from issue</span>
+          )}
+        </div>
       </div>
     </div>
   );

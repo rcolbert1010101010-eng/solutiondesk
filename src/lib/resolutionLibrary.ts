@@ -1,3 +1,4 @@
+import { plainTextToHtml } from './richText';
 import type { Resolution } from '../types';
 
 const DATA_IMAGE_SRC_REGEX = /^data:image\/[a-z0-9.+-]+;base64,[a-z0-9+/=\s]+$/i;
@@ -172,6 +173,35 @@ export function getResolutionUpdatedAt(resolution: Resolution): string {
 
 export function isLibraryResolution(resolution: Resolution): boolean {
   return resolution.sourceType !== 'issue';
+}
+
+export function getResolutionSourceLabel(resolution: Resolution): 'Library' | 'From Issue' {
+  return isLibraryResolution(resolution) ? 'Library' : 'From Issue';
+}
+
+export function getResolutionNotesHtml(resolution: Resolution): string {
+  if (resolution.notes && resolution.notes.trim()) {
+    return resolution.notes;
+  }
+
+  return plainTextToHtml(resolution.notesText ?? '');
+}
+
+export function getResolutionDetailPath(resolution: Pick<Resolution, 'id'>): string | null {
+  if (!resolution.id) return null;
+  return `/resolutions/${resolution.id}`;
+}
+
+export function getResolutionEditPath(resolution: Resolution): string | null {
+  if (!resolution.id) return null;
+
+  if (isLibraryResolution(resolution)) {
+    return `/resolution-library?edit=${encodeURIComponent(resolution.id)}`;
+  }
+
+  const issueId = resolution.sourceIssueId ?? resolution.issueId;
+  if (!issueId) return null;
+  return `/issues/${issueId}?editResolution=${encodeURIComponent(resolution.id)}`;
 }
 
 export function getResolutionPreviewText(resolution: Resolution): string {

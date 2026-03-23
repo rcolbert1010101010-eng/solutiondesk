@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   getIssueById,
   updateIssue,
@@ -236,6 +236,7 @@ function renderStepValue(step: string, index: number): React.ReactNode {
 export const IssueDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [issue, setIssue] = useState<Issue | null>(null);
   const [editing, setEditing] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -447,6 +448,24 @@ export const IssueDetail: React.FC = () => {
       notesText: resolution.notesText ?? ''
     });
   };
+
+  useEffect(() => {
+    if (!issue) return;
+
+    const requestedResolutionId = searchParams.get('editResolution');
+    if (!requestedResolutionId) return;
+
+    const requestedResolution = (issue.resolutions ?? []).find(resolution => resolution.id === requestedResolutionId);
+    if (!requestedResolution) return;
+
+    startResolutionEdit(requestedResolution);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('editResolution');
+    setSearchParams(nextParams, { replace: true });
+    window.requestAnimationFrame(() => {
+      document.getElementById('issue-resolutions')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }, [issue, searchParams, setSearchParams]);
 
   const cancelResolutionEdit = () => {
     setEditingResolutionId(null);
@@ -1003,7 +1022,10 @@ export const IssueDetail: React.FC = () => {
         </div>
 
         {/* Master Incident Controls */}
-        <div className={`border rounded-xl p-5 mb-6 bg-white border-slate-200 dark:bg-zinc-900 dark:border-zinc-800`}>
+        <div
+          id="issue-resolutions"
+          className={`border rounded-xl p-5 mb-6 bg-white border-slate-200 dark:bg-zinc-900 dark:border-zinc-800`}
+        >
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <Star size={15} className="text-violet-400" />
