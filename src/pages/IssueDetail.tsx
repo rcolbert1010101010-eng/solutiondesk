@@ -358,14 +358,6 @@ export const IssueDetail: React.FC = () => {
     };
   }, []);
 
-  if (!issue) {
-    return (
-      <div className="flex-1 flex items-center justify-center">
-        <p className="text-slate-500 dark:text-zinc-500">Loading...</p>
-      </div>
-    );
-  }
-
   const handleSave = async () => {
     if (!id) return;
     setActionError('');
@@ -466,6 +458,14 @@ export const IssueDetail: React.FC = () => {
       document.getElementById('issue-resolutions')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
   }, [issue, searchParams, setSearchParams]);
+
+  if (!issue) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <p className="text-slate-500 dark:text-zinc-500">Loading...</p>
+      </div>
+    );
+  }
 
   const cancelResolutionEdit = () => {
     setEditingResolutionId(null);

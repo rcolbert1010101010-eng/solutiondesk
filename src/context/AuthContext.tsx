@@ -98,15 +98,26 @@ function mapSupabaseError(error: { message?: string } | null | undefined, fallba
   return error?.message?.trim() || fallback;
 }
 
+function isProfilesAccessDenied(error: { message?: string; details?: string; code?: string } | null | undefined): boolean {
+  const combined = `${error?.message ?? ''} ${error?.details ?? ''}`.toLowerCase();
+  return (
+    error?.code === '42501' ||
+    combined.includes('row-level security') ||
+    combined.includes('permission denied')
+  );
+}
+
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [profilesSyncBlocked, setProfilesSyncBlocked] = useState(false);
 
   const loadProfileForUser = useCallback(async (user: User, displayNameOverride?: string | null): Promise<Profile | null> => {
     const email = normalizeEmail(user.email);
     if (!email) return null;
+    if (profilesSyncBlocked) return null;
 
     const providedDisplayName = displayNameOverride?.trim();
     const displayName = providedDisplayName || getDisplayNameFromAuthUser(user);
@@ -123,7 +134,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       );
 
     if (upsertError) {
-      console.warn('Profile upsert skipped. Using fallback role.', upsertError.message);
+      if (isProfilesAccessDenied(upsertError)) {
+        setProfilesSyncBlocked(true);
+        console.warn('Profiles access denied by RLS. Skipping profile sync and using auth fallback.', upsertError.message);
+      } else {
+        console.warn('Profile upsert skipped. Using fallback role.', upsertError.message);
+      }
       return null;
     }
 
@@ -139,13 +155,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .maybeSingle<ProfileRow>();
 
     if (error) {
-      console.warn('Profile fetch skipped. Using fallback role.', error.message);
+      if (isProfilesAccessDenied(error)) {
+        setProfilesSyncBlocked(true);
+        console.warn('Profiles access denied during fetch. Skipping profile sync and using auth fallback.', error.message);
+      } else {
+        console.warn('Profile fetch skipped. Using fallback role.', error.message);
+      }
       return null;
     }
 
     if (!data) return null;
     return toProfile(data);
-  }, []);
+  }, [profilesSyncBlocked]);
 
   const syncSession = useCallback(async (session: Session | null, displayNameOverride?: string | null) => {
     if (!session?.user) {
