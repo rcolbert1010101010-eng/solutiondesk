@@ -2,6 +2,7 @@ import React from 'react';
 import { Clock, Link as LinkIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { Resolution } from '../types';
+import { AttachmentPanel } from './AttachmentPanel';
 import { SanitizedHtmlContent } from './RichTextEditor';
 import { TagBadge } from './TagBadge';
 import {
@@ -100,6 +101,12 @@ export const ResolutionDetailPanel: React.FC<ResolutionDetailPanelProps> = ({ re
           )}
         </section>
       </div>
+
+      <AttachmentPanel
+        title="Attachments"
+        attachments={resolution.attachments ?? []}
+        emptyMessage="No files attached to this resolution."
+      />
     </div>
   );
 };

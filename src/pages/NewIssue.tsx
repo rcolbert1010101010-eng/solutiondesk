@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { addIssue, getAllIssues, ISSUES_CHANGED_EVENT } from '../lib/db';
+import { addIssue, getAllIssues, ISSUES_CHANGED_EVENT, syncIssueAttachments } from '../lib/db';
 import { Severity, TagReference, Issue, Tag } from '../types';
+import { AttachmentPanel } from '../components/AttachmentPanel';
 import { TagBadge } from '../components/TagBadge';
 import { RichTextEditor } from '../components/RichTextEditor';
 import { SeverityBadge } from '../components/SeverityBadge';
 import { SemanticMatchCard } from '../components/SemanticMatchCard';
 import { semanticSearch, SemanticMatch } from '../lib/semanticSearch';
+import { createAttachmentDraftState, getAttachmentSyncInput, type AttachmentDraftState } from '../lib/attachments';
 import { createTag, getTagByName, listTags, normalizeTagName, TAGS_CHANGED_EVENT } from '../lib/tags';
 import {
   createSystemAffected,
@@ -46,6 +48,7 @@ export const NewIssue: React.FC = () => {
   const [quickTagMessage, setQuickTagMessage] = useState('');
   const [quickTagMessageTone, setQuickTagMessageTone] = useState<'info' | 'success' | 'error'>('info');
   const [assignee, setAssignee] = useState('');
+  const [attachmentDraftState, setAttachmentDraftState] = useState<AttachmentDraftState>(createAttachmentDraftState());
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -205,6 +208,10 @@ export const NewIssue: React.FC = () => {
         assignee: assignee.trim() || undefined,
         tags: selectedTags,
       });
+      const attachmentSync = getAttachmentSyncInput(attachmentDraftState);
+      if (attachmentSync.attachmentIdsToDelete.length > 0 || attachmentSync.filesToUpload.length > 0) {
+        await syncIssueAttachments(newIssue.id, attachmentSync);
+      }
       navigate(`/issues/${newIssue.id}`);
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Unable to create issue.');
@@ -441,6 +448,15 @@ export const NewIssue: React.FC = () => {
                 className={`w-full border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-colors bg-white border-slate-200 text-slate-900 placeholder-slate-400 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-100 dark:placeholder-zinc-500`}
               />
             </div>
+
+            <AttachmentPanel
+              mode="edit"
+              title="Attachments"
+              draftState={attachmentDraftState}
+              onChangeDraftState={setAttachmentDraftState}
+              busy={submitting}
+              emptyMessage="No attachments selected yet."
+            />
 
             {/* Submit */}
             {submitError && (

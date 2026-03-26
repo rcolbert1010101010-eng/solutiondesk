@@ -7,6 +7,8 @@ import {
   addResolution,
   updateResolution,
   deleteResolution,
+  syncIssueAttachments,
+  syncResolutionAttachments,
   promoteToMasterIncident,
   demoteMasterIncident,
   linkIssueToMaster,
@@ -19,6 +21,7 @@ import {
   ISSUES_CHANGED_EVENT
 } from '../lib/db';
 import { Issue, Resolution, Status, Severity, TagReference, RelationshipType, IssueRelationship, Tag } from '../types';
+import { AttachmentPanel } from '../components/AttachmentPanel';
 import { StatusBadge } from '../components/StatusBadge';
 import { SeverityBadge } from '../components/SeverityBadge';
 import { TagBadge } from '../components/TagBadge';
@@ -32,6 +35,7 @@ import {
   normalizeSystemAffectedName,
   SYSTEMS_AFFECTED_CHANGED_EVENT,
 } from '../lib/systemsAffected';
+import { createAttachmentDraftState, getAttachmentSyncInput, type AttachmentDraftState } from '../lib/attachments';
 import { getIssueDescriptionHtml, getIssueDescriptionText, plainTextToHtml } from '../lib/richText';
 import {
   ArrowLeft,
@@ -261,12 +265,17 @@ export const IssueDetail: React.FC = () => {
   const [copied, setCopied] = useState(false);
   const [inlineStatusSaving, setInlineStatusSaving] = useState(false);
   const [inlineStatusSaved, setInlineStatusSaved] = useState(false);
+  const [savingIssue, setSavingIssue] = useState(false);
+  const [savingResolution, setSavingResolution] = useState(false);
+  const [savingResolutionEdit, setSavingResolutionEdit] = useState(false);
   const [editingResolutionId, setEditingResolutionId] = useState<string | null>(null);
   const [resolutionEditForm, setResolutionEditForm] = useState({
     stepsHtml: '<p></p>',
     notesHtml: '<p></p>',
     notesText: ''
   });
+  const [issueAttachmentDraftState, setIssueAttachmentDraftState] = useState<AttachmentDraftState>(createAttachmentDraftState());
+  const [resolutionEditAttachmentDraftState, setResolutionEditAttachmentDraftState] = useState<AttachmentDraftState>(createAttachmentDraftState());
 
   const [editForm, setEditForm] = useState({
     title: '',
@@ -284,6 +293,7 @@ export const IssueDetail: React.FC = () => {
     notesHtml: '<p></p>',
     notesText: ''
   });
+  const [resolutionAttachmentDraftState, setResolutionAttachmentDraftState] = useState<AttachmentDraftState>(createAttachmentDraftState());
 
   const loadIssue = async () => {
     if (!id) return;
@@ -300,6 +310,7 @@ export const IssueDetail: React.FC = () => {
       assignee: found.assignee ?? '',
       tags: found.tags ?? []
     });
+    setIssueAttachmentDraftState(createAttachmentDraftState(found.attachments ?? []));
     if (found.isMasterIncident) {
       setLinkedRelationships(await getRelationshipsForMaster(found.id));
     }
@@ -361,8 +372,9 @@ export const IssueDetail: React.FC = () => {
   const handleSave = async () => {
     if (!id) return;
     setActionError('');
+    setSavingIssue(true);
     try {
-      await updateIssue(id, {
+      const updatedIssue = await updateIssue(id, {
         title: editForm.title,
         description: editForm.descriptionText,
         descriptionText: editForm.descriptionText,
@@ -373,12 +385,21 @@ export const IssueDetail: React.FC = () => {
         assignee: editForm.assignee || undefined,
         tags: editForm.tags
       });
+      const attachmentSync = getAttachmentSyncInput(issueAttachmentDraftState);
+      if (attachmentSync.attachmentIdsToDelete.length > 0 || attachmentSync.filesToUpload.length > 0) {
+        await syncIssueAttachments(id, attachmentSync);
+      }
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2000);
       setEditing(false);
+      if (updatedIssue) {
+        setIssue(updatedIssue);
+      }
       await loadIssue();
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Unable to update issue.');
+    } finally {
+      setSavingIssue(false);
     }
   };
 
@@ -412,21 +433,32 @@ export const IssueDetail: React.FC = () => {
     const steps = stepsHtmlToLines(resolutionForm.stepsHtml);
     if (!id || steps.length === 0) return;
     setActionError('');
+    setSavingResolution(true);
     try {
       const notesText = resolutionForm.notesText.trim();
       const notesHtml = resolutionForm.notesHtml.trim();
       const stepsHtml = resolutionForm.stepsHtml.trim();
-      await addResolution(id, {
+      const updatedIssue = await addResolution(id, {
         stepsHtml,
         steps,
         notes: notesText ? notesHtml : undefined,
         notesText: notesText || undefined
       });
+      const createdResolution = updatedIssue?.resolutions?.[0];
+      if (createdResolution?.id) {
+        const attachmentSync = getAttachmentSyncInput(resolutionAttachmentDraftState);
+        if (attachmentSync.attachmentIdsToDelete.length > 0 || attachmentSync.filesToUpload.length > 0) {
+          await syncResolutionAttachments(createdResolution.id, attachmentSync);
+        }
+      }
       setResolutionForm({ stepsHtml: '<p></p>', notesHtml: '<p></p>', notesText: '' });
+      setResolutionAttachmentDraftState(createAttachmentDraftState());
       setShowResolutionForm(false);
       await loadIssue();
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Unable to add resolution.');
+    } finally {
+      setSavingResolution(false);
     }
   };
 
@@ -439,6 +471,7 @@ export const IssueDetail: React.FC = () => {
       notesHtml: resolution.notes ?? plainTextToHtml(resolution.notesText ?? ''),
       notesText: resolution.notesText ?? ''
     });
+    setResolutionEditAttachmentDraftState(createAttachmentDraftState(resolution.attachments ?? []));
   };
 
   useEffect(() => {
@@ -474,6 +507,7 @@ export const IssueDetail: React.FC = () => {
       notesHtml: '<p></p>',
       notesText: ''
     });
+    setResolutionEditAttachmentDraftState(createAttachmentDraftState());
   };
 
   const handleSaveResolutionEdit = async () => {
@@ -481,6 +515,7 @@ export const IssueDetail: React.FC = () => {
     const steps = stepsHtmlToLines(resolutionEditForm.stepsHtml);
     if (steps.length === 0) return;
     setActionError('');
+    setSavingResolutionEdit(true);
     try {
       const notesText = resolutionEditForm.notesText.trim();
       const notesHtml = resolutionEditForm.notesHtml.trim();
@@ -492,11 +527,17 @@ export const IssueDetail: React.FC = () => {
       });
 
       if (!updated) return;
+      const attachmentSync = getAttachmentSyncInput(resolutionEditAttachmentDraftState);
+      if (attachmentSync.attachmentIdsToDelete.length > 0 || attachmentSync.filesToUpload.length > 0) {
+        await syncResolutionAttachments(editingResolutionId, attachmentSync);
+      }
       setIssue(updated);
       setAllIssues(await getAllIssues());
       cancelResolutionEdit();
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Unable to update resolution.');
+    } finally {
+      setSavingResolutionEdit(false);
     }
   };
 
@@ -1002,14 +1043,25 @@ export const IssueDetail: React.FC = () => {
             )}
           </div>
 
+          <AttachmentPanel
+            mode={editing ? 'edit' : 'read'}
+            title="Attachments"
+            attachments={issue.attachments ?? []}
+            draftState={editing ? issueAttachmentDraftState : undefined}
+            onChangeDraftState={editing ? setIssueAttachmentDraftState : undefined}
+            busy={savingIssue}
+            emptyMessage="No files attached to this issue."
+          />
+
           {/* Edit Actions */}
           {editing && (
             <div className={`flex items-center gap-2 pt-4 border-t border-slate-200 dark:border-zinc-800`}>
               <button
                 onClick={handleSave}
+                disabled={savingIssue}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-amber-500 text-zinc-900 text-sm font-semibold hover:bg-amber-400 transition-colors"
               >
-                <Save size={14} /> Save Changes
+                <Save size={14} /> {savingIssue ? 'Saving...' : 'Save Changes'}
               </button>
               <button
                 onClick={() => { setEditing(false); loadIssue(); }}
@@ -1137,7 +1189,18 @@ export const IssueDetail: React.FC = () => {
               )}
             </div>
             <button
-              onClick={() => setShowResolutionForm(!showResolutionForm)}
+              onClick={() => {
+                if (showResolutionForm) {
+                  setShowResolutionForm(false);
+                  setResolutionForm({ stepsHtml: '<p></p>', notesHtml: '<p></p>', notesText: '' });
+                  setResolutionAttachmentDraftState(createAttachmentDraftState());
+                  return;
+                }
+
+                setResolutionForm({ stepsHtml: '<p></p>', notesHtml: '<p></p>', notesText: '' });
+                setResolutionAttachmentDraftState(createAttachmentDraftState());
+                setShowResolutionForm(true);
+              }}
               disabled={isResolutionEditing}
               className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border border-amber-500/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
@@ -1167,16 +1230,28 @@ export const IssueDetail: React.FC = () => {
                     placeholder="Additional notes..."
                   />
                 </div>
+                <AttachmentPanel
+                  mode="edit"
+                  title="Attachments"
+                  draftState={resolutionAttachmentDraftState}
+                  onChangeDraftState={setResolutionAttachmentDraftState}
+                  busy={savingResolution}
+                  emptyMessage="No files selected for this resolution."
+                />
                 <div className="flex gap-2">
                   <button
                     onClick={handleAddResolution}
-                    disabled={resolutionDraftSteps.length === 0}
+                    disabled={savingResolution || resolutionDraftSteps.length === 0}
                     className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-amber-500 text-zinc-900 text-xs font-semibold hover:bg-amber-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    <Save size={12} /> Save Resolution
+                    <Save size={12} /> {savingResolution ? 'Saving...' : 'Save Resolution'}
                   </button>
                   <button
-                    onClick={() => { setShowResolutionForm(false); setResolutionForm({ stepsHtml: '<p></p>', notesHtml: '<p></p>', notesText: '' }); }}
+                    onClick={() => {
+                      setShowResolutionForm(false);
+                      setResolutionForm({ stepsHtml: '<p></p>', notesHtml: '<p></p>', notesText: '' });
+                      setResolutionAttachmentDraftState(createAttachmentDraftState());
+                    }}
                     className={`px-4 py-2 rounded-lg text-xs transition-colors bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 dark:bg-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-600`}
                   >
                     Cancel
@@ -1250,13 +1325,21 @@ export const IssueDetail: React.FC = () => {
                             placeholder="Additional notes..."
                           />
                         </div>
+                        <AttachmentPanel
+                          mode="edit"
+                          title="Attachments"
+                          draftState={resolutionEditAttachmentDraftState}
+                          onChangeDraftState={setResolutionEditAttachmentDraftState}
+                          busy={savingResolutionEdit}
+                          emptyMessage="No files selected for this resolution."
+                        />
                         <div className="flex gap-2">
                           <button
                             onClick={handleSaveResolutionEdit}
-                            disabled={resolutionEditDraftSteps.length === 0}
+                            disabled={savingResolutionEdit || resolutionEditDraftSteps.length === 0}
                             className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-amber-500 text-zinc-900 text-xs font-semibold hover:bg-amber-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                           >
-                            <Save size={12} /> Save
+                            <Save size={12} /> {savingResolutionEdit ? 'Saving...' : 'Save'}
                           </button>
                           <button
                             onClick={cancelResolutionEdit}
@@ -1293,6 +1376,13 @@ export const IssueDetail: React.FC = () => {
                             />
                           </div>
                         )}
+                        <div className="mt-3">
+                          <AttachmentPanel
+                            title="Attachments"
+                            attachments={res.attachments ?? []}
+                            emptyMessage="No files attached to this resolution."
+                          />
+                        </div>
                       </>
                     )}
                     {res.createdAt && (

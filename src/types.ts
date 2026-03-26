@@ -4,6 +4,23 @@ export type RelationshipType = 'duplicate' | 'similar' | 'derived_from' | 'confi
 export type ConfidenceLevel = 'Low Confidence' | 'Medium Confidence' | 'High Confidence' | 'Proven Resolution';
 
 export type TagReference = string;
+export type AttachmentParentType = 'issue' | 'resolution';
+
+export interface Attachment {
+  id: string;
+  issueId?: string | null;
+  resolutionId?: string | null;
+  parentType: AttachmentParentType;
+  parentId: string;
+  bucketName: string;
+  storagePath: string;
+  fileName: string;
+  mimeType: string;
+  fileSize: number;
+  fileExtension?: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface Tag {
   id: string;
@@ -30,6 +47,7 @@ export interface Resolution {
   notes?: string;
   notesText?: string;
   tags?: TagReference[];
+  attachments?: Attachment[];
   createdAt?: string;
   updatedAt?: string;
   resolvedAt?: string;
@@ -67,6 +85,7 @@ export interface Issue {
   updatedAt?: string;
   assignee?: string;
   tags?: TagReference[];
+  attachments?: Attachment[];
   resolution?: Resolution;
   resolutions?: Resolution[];
   isMasterIncident?: boolean;

@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { BookOpen, LayoutGrid, List, Plus, Save, Search, SlidersHorizontal, Tag as TagIcon, X } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
+import { AttachmentPanel } from '../components/AttachmentPanel';
 import { RichTextEditor } from '../components/RichTextEditor';
 import { ResolutionCard } from '../components/ResolutionCard';
 import { ResolutionPreviewDialog } from '../components/ResolutionPreviewDialog';
 import { ResolutionTable } from '../components/ResolutionTable';
 import { TagBadge } from '../components/TagBadge';
+import { createAttachmentDraftState, getAttachmentSyncInput, type AttachmentDraftState } from '../lib/attachments';
 import { plainTextToHtml } from '../lib/richText';
 import {
   getResolutionStepsHtml,
@@ -21,6 +23,7 @@ import {
   formatSupabaseError,
   listLibraryResolutions,
   RESOLUTIONS_CHANGED_EVENT,
+  syncResolutionAttachmentsInStore,
   updateLibraryResolution,
 } from '../lib/supabaseData';
 import type { Resolution, Tag } from '../types';
@@ -56,6 +59,7 @@ export const ResolutionLibrary: React.FC = () => {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<ResolutionFormState>(EMPTY_FORM);
+  const [attachmentDraftState, setAttachmentDraftState] = useState<AttachmentDraftState>(createAttachmentDraftState());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [previewingResolution, setPreviewingResolution] = useState<Resolution | null>(null);
@@ -123,6 +127,7 @@ export const ResolutionLibrary: React.FC = () => {
     setForm(EMPTY_FORM);
     setEditingId(null);
     setShowForm(false);
+    setAttachmentDraftState(createAttachmentDraftState());
     setQuickTagInput('');
     setQuickTagMessage('');
   };
@@ -131,6 +136,7 @@ export const ResolutionLibrary: React.FC = () => {
     setError('');
     setEditingId(null);
     setForm(EMPTY_FORM);
+    setAttachmentDraftState(createAttachmentDraftState());
     setQuickTagInput('');
     setQuickTagMessage('');
     setShowForm(true);
@@ -146,6 +152,7 @@ export const ResolutionLibrary: React.FC = () => {
       notesText: resolution.notesText ?? '',
       tags: Array.isArray(resolution.tags) ? resolution.tags : [],
     });
+    setAttachmentDraftState(createAttachmentDraftState(resolution.attachments ?? []));
     setQuickTagInput('');
     setQuickTagMessage('');
     setShowForm(true);
@@ -220,10 +227,15 @@ export const ResolutionLibrary: React.FC = () => {
         tags: form.tags,
       };
 
-      if (editingId) {
-        await updateLibraryResolution(editingId, payload);
-      } else {
-        await createLibraryResolution(payload);
+      const savedResolution = editingId
+        ? await updateLibraryResolution(editingId, payload)
+        : await createLibraryResolution(payload);
+
+      if (savedResolution?.id) {
+        const attachmentSync = getAttachmentSyncInput(attachmentDraftState);
+        if (attachmentSync.attachmentIdsToDelete.length > 0 || attachmentSync.filesToUpload.length > 0) {
+          await syncResolutionAttachmentsInStore(savedResolution.id, attachmentSync);
+        }
       }
 
       resetForm();
@@ -513,6 +525,15 @@ export const ResolutionLibrary: React.FC = () => {
                   })}
                 </div>
               </div>
+
+              <AttachmentPanel
+                mode="edit"
+                title="Attachments"
+                draftState={attachmentDraftState}
+                onChangeDraftState={setAttachmentDraftState}
+                busy={saving}
+                emptyMessage="No attachments selected for this resolution."
+              />
 
               <div className="flex gap-2">
                 <button

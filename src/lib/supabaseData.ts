@@ -1,5 +1,6 @@
 import { supabase } from './supabaseClient';
 import type {
+  Attachment,
   Issue,
   IssueRelationship,
   RelationshipType,
@@ -10,6 +11,18 @@ import type {
   Tag,
   TagReference,
 } from '../types';
+import {
+  ATTACHMENTS_CHANGED_EVENT,
+  deleteAttachmentsForIssue,
+  deleteAttachmentsForResolution,
+  groupAttachmentsByIssueId,
+  groupAttachmentsByResolutionId,
+  listAttachmentsByIssueIds,
+  listAttachmentsByResolutionIds,
+  mergeAttachments,
+  syncIssueAttachments as syncIssueAttachmentsStore,
+  syncResolutionAttachments as syncResolutionAttachmentsStore,
+} from './attachments';
 import { htmlToPlainText, plainTextToHtml } from './richText';
 
 export const TAGS_STORAGE_KEY = 'resolution_desk_tags';
@@ -372,6 +385,23 @@ function mapTagIdsToNames(tagIds: string[] | null | undefined, tagsById: Map<str
     .map(tagId => tagsById.get(tagId)?.name)
     .filter((name): name is string => Boolean(name));
 }
+
+function mergeTagNames(...groups: Array<string[] | undefined>): string[] {
+  const seen = new Set<string>();
+  const merged: string[] = [];
+
+  for (const group of groups) {
+    for (const name of group ?? []) {
+      const normalized = normalizeTagNameKey(name);
+      if (!normalized || seen.has(normalized)) continue;
+      seen.add(normalized);
+      merged.push(name.trim());
+    }
+  }
+
+  return merged;
+}
+
 function buildRelationshipStats(rows: IssueRow[]): {
   counts: Map<string, number>;
   lastLinkedAt: Map<string, string>;
@@ -394,7 +424,11 @@ function buildRelationshipStats(rows: IssueRow[]): {
   return { counts, lastLinkedAt };
 }
 
-function mapResolutionRow(row: ResolutionRow, tagsById: Map<string, Tag>): Resolution {
+function mapResolutionRow(
+  row: ResolutionRow,
+  tagsById: Map<string, Tag>,
+  attachments: Attachment[] = [],
+): Resolution {
   const steps = normalizeResolutionSteps(row.steps);
   const notesHtml = row.notes?.trim() || undefined;
   const notesText = notesHtml ? htmlToPlainText(notesHtml) : undefined;
@@ -412,17 +446,22 @@ function mapResolutionRow(row: ResolutionRow, tagsById: Map<string, Tag>): Resol
     notes: notesHtml,
     notesText,
     tags: mapTagIdsToNames(row.tags, tagsById),
+    attachments,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
 }
 
-function groupResolutionsByIssue(rows: ResolutionRow[], tagsById: Map<string, Tag>): Map<string, Resolution[]> {
+function groupResolutionsByIssue(
+  rows: ResolutionRow[],
+  tagsById: Map<string, Tag>,
+  attachmentsByResolutionId: Map<string, Attachment[]>,
+): Map<string, Resolution[]> {
   const grouped = new Map<string, Resolution[]>();
 
   for (const row of rows) {
     if (!row.issue_id) continue;
-    const resolution = mapResolutionRow(row, tagsById);
+    const resolution = mapResolutionRow(row, tagsById, attachmentsByResolutionId.get(row.id) ?? []);
     const current = grouped.get(row.issue_id) ?? [];
     current.push(resolution);
     grouped.set(row.issue_id, current);
@@ -440,6 +479,7 @@ function mapIssueRow(
   tagsById: Map<string, Tag>,
   rows: IssueRow[],
   issueResolutions: Map<string, Resolution[]>,
+  issueAttachments: Attachment[] = [],
 ): Issue {
   const { counts, lastLinkedAt } = buildRelationshipStats(rows);
   const descriptions = normalizeDescriptionFields({
@@ -461,6 +501,7 @@ function mapIssueRow(
     updatedAt: row.updated_at,
     assignee: row.assignee ?? undefined,
     tags: mapTagIdsToNames(row.tags, tagsById),
+    attachments: issueAttachments,
     resolution: resolutions[0],
     resolutions,
     isMasterIncident: Boolean(row.is_master_incident || (counts.get(row.id) ?? 0) > 0),
@@ -617,9 +658,19 @@ async function fetchIssuesFromSupabase(): Promise<Issue[]> {
     fetchResolutionRowsFromSupabase(),
   ]);
 
+  const [issueAttachments, resolutionAttachments] = await Promise.all([
+    listAttachmentsByIssueIds(rows.map(row => row.id)),
+    listAttachmentsByResolutionIds(resolutionRows.map(row => row.id)),
+  ]);
+
   const tagMap = new Map(tags.map(tag => [tag.id, tag]));
-  const resolutionsByIssue = groupResolutionsByIssue(resolutionRows, tagMap);
-  issuesCache = rows.map(row => mapIssueRow(row, tagMap, rows, resolutionsByIssue));
+  const resolutionsByIssue = groupResolutionsByIssue(
+    resolutionRows,
+    tagMap,
+    groupAttachmentsByResolutionId(resolutionAttachments),
+  );
+  const attachmentsByIssueId = groupAttachmentsByIssueId(issueAttachments);
+  issuesCache = rows.map(row => mapIssueRow(row, tagMap, rows, resolutionsByIssue, attachmentsByIssueId.get(row.id) ?? []));
   issuesLoaded = true;
   return [...issuesCache];
 }
@@ -634,9 +685,18 @@ async function fetchIssueFromSupabase(id: string): Promise<Issue | undefined> {
 
   if (!row) return undefined;
 
+  const [issueAttachments, resolutionAttachments] = await Promise.all([
+    listAttachmentsByIssueIds([id]),
+    listAttachmentsByResolutionIds(resolutionRows.map(item => item.id)),
+  ]);
+
   const tagMap = new Map(tags.map(tag => [tag.id, tag]));
-  const resolutionsByIssue = groupResolutionsByIssue(resolutionRows, tagMap);
-  const issue = mapIssueRow(row, tagMap, rows, resolutionsByIssue);
+  const resolutionsByIssue = groupResolutionsByIssue(
+    resolutionRows,
+    tagMap,
+    groupAttachmentsByResolutionId(resolutionAttachments),
+  );
+  const issue = mapIssueRow(row, tagMap, rows, resolutionsByIssue, issueAttachments);
 
   const index = issuesCache.findIndex(item => item.id === issue.id);
   if (index >= 0) {
@@ -649,13 +709,35 @@ async function fetchIssueFromSupabase(id: string): Promise<Issue | undefined> {
 }
 
 async function fetchLibraryResolutionsFromSupabase(): Promise<Resolution[]> {
-  const [tags, rows] = await Promise.all([
+  const [tags, rows, issues] = await Promise.all([
     fetchTagsFromSupabase(),
     fetchLibraryResolutionRowsFromSupabase(),
+    fetchIssueRowsFromSupabase(),
+  ]);
+
+  const [issueAttachments, resolutionAttachments] = await Promise.all([
+    listAttachmentsByIssueIds(rows.map(row => row.issue_id).filter((value): value is string => Boolean(value))),
+    listAttachmentsByResolutionIds(rows.map(row => row.id)),
   ]);
 
   const tagMap = new Map(tags.map(tag => [tag.id, tag]));
-  libraryResolutionsCache = rows.map(row => mapResolutionRow(row, tagMap));
+  const issueTagsById = new Map(issues.map(issue => [issue.id, mapTagIdsToNames(issue.tags, tagMap)]));
+  const attachmentsByIssueId = groupAttachmentsByIssueId(issueAttachments);
+  const attachmentsByResolutionId = groupAttachmentsByResolutionId(resolutionAttachments);
+
+  libraryResolutionsCache = rows.map(row => {
+    const resolution = mapResolutionRow(row, tagMap, attachmentsByResolutionId.get(row.id) ?? []);
+    if (!row.issue_id) return resolution;
+
+    return {
+      ...resolution,
+      tags: mergeTagNames(issueTagsById.get(row.issue_id), resolution.tags),
+      attachments: mergeAttachments(
+        attachmentsByIssueId.get(row.issue_id),
+        resolution.attachments,
+      ),
+    };
+  });
   libraryResolutionsLoaded = true;
   return [...libraryResolutionsCache];
 }
@@ -1308,6 +1390,16 @@ async function refreshLibraryResolutionsAndDispatch(): Promise<void> {
   dispatchWindowEvent(RESOLUTIONS_CHANGED_EVENT);
 }
 
+async function refreshAttachmentConsumersAndDispatch(): Promise<void> {
+  await Promise.all([
+    fetchIssuesFromSupabase(),
+    fetchLibraryResolutionsFromSupabase(),
+  ]);
+  dispatchWindowEvent(ATTACHMENTS_CHANGED_EVENT);
+  dispatchWindowEvent(ISSUES_CHANGED_EVENT);
+  dispatchWindowEvent(RESOLUTIONS_CHANGED_EVENT);
+}
+
 export async function listTagsFromStore(): Promise<Tag[]> {
   return fetchTagsFromSupabase();
 }
@@ -1530,6 +1622,13 @@ export async function deleteIssueFromStore(id: string): Promise<boolean> {
     if (error) throw formatSupabaseError(error, 'Unable to clear linked issues before delete.');
   }
 
+  for (const resolution of current.resolutions ?? []) {
+    if (!resolution.id) continue;
+    await deleteAttachmentsForResolution(resolution.id);
+  }
+
+  await deleteAttachmentsForIssue(id);
+
   const { error } = await supabase
     .from('issues')
     .delete()
@@ -1548,13 +1647,24 @@ export async function listLibraryResolutions(): Promise<Resolution[]> {
     fetchIssueRowsFromSupabase(),
   ]);
 
+  const [issueAttachments, resolutionAttachments] = await Promise.all([
+    listAttachmentsByIssueIds(rows.map(row => row.issue_id).filter((value): value is string => Boolean(value))),
+    listAttachmentsByResolutionIds(rows.map(row => row.id)),
+  ]);
+
   const tagMap = new Map(tags.map(tag => [tag.id, tag]));
   const issueTitleById = new Map(issues.map(issue => [issue.id, issue.title]));
+  const issueTagsById = new Map(issues.map(issue => [issue.id, mapTagIdsToNames(issue.tags, tagMap)]));
+  const attachmentsByIssueId = groupAttachmentsByIssueId(issueAttachments);
+  const attachmentsByResolutionId = groupAttachmentsByResolutionId(resolutionAttachments);
+
   libraryResolutionsCache = rows.map(row => {
-    const resolution = mapResolutionRow(row, tagMap);
+    const resolution = mapResolutionRow(row, tagMap, attachmentsByResolutionId.get(row.id) ?? []);
     if (row.issue_id) {
       return {
         ...resolution,
+        tags: mergeTagNames(issueTagsById.get(row.issue_id), resolution.tags),
+        attachments: mergeAttachments(attachmentsByIssueId.get(row.issue_id), resolution.attachments),
         sourceType: 'issue' as const,
         sourceIssueId: row.issue_id,
         sourceIssueTitle: issueTitleById.get(row.issue_id) ?? 'Issue',
@@ -1585,13 +1695,21 @@ export async function getResolutionById(id: string): Promise<Resolution | undefi
   if (!data) return undefined;
 
   const row = data as ResolutionRow;
+  const [issueAttachments, resolutionAttachments] = await Promise.all([
+    row.issue_id ? listAttachmentsByIssueIds([row.issue_id]) : Promise.resolve([]),
+    listAttachmentsByResolutionIds([row.id]),
+  ]);
+
   const tagMap = new Map(tags.map(tag => [tag.id, tag]));
   const issueTitleById = new Map(issues.map(issue => [issue.id, issue.title]));
-  const resolution = mapResolutionRow(row, tagMap);
+  const issueTagsById = new Map(issues.map(issue => [issue.id, mapTagIdsToNames(issue.tags, tagMap)]));
+  const resolution = mapResolutionRow(row, tagMap, resolutionAttachments);
 
   if (row.issue_id) {
     return {
       ...resolution,
+      tags: mergeTagNames(issueTagsById.get(row.issue_id), resolution.tags),
+      attachments: mergeAttachments(issueAttachments, resolution.attachments),
       sourceType: 'issue',
       sourceIssueId: row.issue_id,
       sourceIssueTitle: issueTitleById.get(row.issue_id) ?? 'Issue',
@@ -1642,6 +1760,8 @@ export async function updateLibraryResolution(id: string, updates: Partial<Resol
 }
 
 export async function deleteLibraryResolution(id: string): Promise<boolean> {
+  await deleteAttachmentsForResolution(id);
+
   const { error } = await supabase
     .from('resolutions')
     .delete()
@@ -1657,8 +1777,10 @@ export async function deleteLibraryResolution(id: string): Promise<boolean> {
 export async function listIssueResolutions(issueId: string): Promise<Resolution[]> {
   const tags = await ensureTagsLoaded();
   const rows = await fetchIssueResolutionRowsFromSupabase(issueId);
+  const attachments = await listAttachmentsByResolutionIds(rows.map(row => row.id));
   const tagMap = new Map(tags.map(tag => [tag.id, tag]));
-  return rows.map(row => mapResolutionRow(row, tagMap));
+  const attachmentsByResolutionId = groupAttachmentsByResolutionId(attachments);
+  return rows.map(row => mapResolutionRow(row, tagMap, attachmentsByResolutionId.get(row.id) ?? []));
 }
 
 export async function addIssueResolution(issueId: string, resolution: Omit<Resolution, 'id'>): Promise<Resolution> {
@@ -1708,6 +1830,8 @@ export async function updateIssueResolution(id: string, updates: Partial<Resolut
 }
 
 export async function deleteIssueResolution(id: string): Promise<boolean> {
+  await deleteAttachmentsForResolution(id);
+
   const { error } = await supabase
     .from('resolutions')
     .delete()
@@ -1718,6 +1842,21 @@ export async function deleteIssueResolution(id: string): Promise<boolean> {
 
   await refreshIssuesAndDispatch();
   return true;
+}
+
+export async function syncIssueAttachmentsInStore(issueId: string, input: { attachmentIdsToDelete: string[]; filesToUpload: File[] }): Promise<Attachment[]> {
+  const attachments = await syncIssueAttachmentsStore(issueId, input);
+  await refreshAttachmentConsumersAndDispatch();
+  return attachments;
+}
+
+export async function syncResolutionAttachmentsInStore(
+  resolutionId: string,
+  input: { attachmentIdsToDelete: string[]; filesToUpload: File[] },
+): Promise<Attachment[]> {
+  const attachments = await syncResolutionAttachmentsStore(resolutionId, input);
+  await refreshAttachmentConsumersAndDispatch();
+  return attachments;
 }
 
 export async function addResolutionToStore(issueId: string, resolution: Omit<Resolution, 'id'>): Promise<Issue | undefined> {

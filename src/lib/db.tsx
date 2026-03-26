@@ -13,6 +13,8 @@ import {
   ISSUES_CHANGED_EVENT,
   linkIssueToMasterInStore,
   promoteIssueToMaster,
+  syncIssueAttachmentsInStore,
+  syncResolutionAttachmentsInStore,
   unlinkIssueInStore,
   updateIssueInStore,
   updateResolutionInStore,
@@ -63,6 +65,14 @@ export async function updateResolution(issueId: string, resolutionId: string, up
 
 export async function deleteResolution(issueId: string, resolutionId: string): Promise<Issue | undefined> {
   return deleteResolutionFromStore(issueId, resolutionId);
+}
+
+export async function syncIssueAttachments(issueId: string, input: { attachmentIdsToDelete: string[]; filesToUpload: File[] }) {
+  return syncIssueAttachmentsInStore(issueId, input);
+}
+
+export async function syncResolutionAttachments(resolutionId: string, input: { attachmentIdsToDelete: string[]; filesToUpload: File[] }) {
+  return syncResolutionAttachmentsInStore(resolutionId, input);
 }
 
 export async function incrementReferenceCount(issueId: string, resolutionId?: string): Promise<Issue | undefined> {
