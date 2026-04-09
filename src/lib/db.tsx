@@ -13,6 +13,7 @@ import {
   ISSUES_CHANGED_EVENT,
   linkIssueToMasterInStore,
   promoteIssueToMaster,
+  refreshIssueByIdFromStore,
   syncIssueAttachmentsInStore,
   syncResolutionAttachmentsInStore,
   unlinkIssueInStore,
@@ -33,6 +34,10 @@ export async function listIssues(): Promise<Issue[]> {
 
 export async function getIssueById(id: string): Promise<Issue | undefined> {
   return getIssueByIdFromStore(id);
+}
+
+export async function refreshIssueById(id: string): Promise<Issue | undefined> {
+  return refreshIssueByIdFromStore(id);
 }
 
 export async function getIssue(id: string): Promise<Issue | undefined> {

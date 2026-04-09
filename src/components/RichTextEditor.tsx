@@ -108,6 +108,23 @@ function isSelectionInside(editor: HTMLDivElement): boolean {
   return editor.contains(container);
 }
 
+function getSelectedListItem(editor: HTMLDivElement): HTMLLIElement | null {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) return null;
+
+  const container = selection.getRangeAt(0).commonAncestorContainer;
+  const element = container.nodeType === Node.ELEMENT_NODE
+    ? container as Element
+    : container.parentElement;
+
+  if (!element || !editor.contains(element)) return null;
+
+  const listItem = element.closest('li');
+  if (!listItem || !editor.contains(listItem)) return null;
+
+  return listItem;
+}
+
 function insertImageAtCaret(editor: HTMLDivElement, dataUrl: string): void {
   const selection = window.getSelection();
   const image = document.createElement('img');
@@ -253,6 +270,23 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
     reader.readAsDataURL(blob);
   };
 
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Tab') return;
+
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    const listItem = getSelectedListItem(editor);
+    if (!listItem) return;
+
+    event.preventDefault();
+    editor.focus();
+    document.execCommand('styleWithCSS', false, 'false');
+    document.execCommand(event.shiftKey ? 'outdent' : 'indent', false);
+    emitChange();
+    updateFormatState();
+  };
+
   const showPlaceholder = useMemo(() => !hasMeaningfulContent(valueHtml), [valueHtml]);
 
   const toolbarBase = 'h-8 px-2 rounded-md border text-xs transition-colors';
@@ -339,6 +373,7 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
           updateFormatState();
         }}
         onBlur={emitChange}
+        onKeyDown={handleKeyDown}
         onKeyUp={updateFormatState}
         onMouseUp={updateFormatState}
         onPaste={handlePaste}

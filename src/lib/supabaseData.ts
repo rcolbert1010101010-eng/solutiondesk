@@ -1567,6 +1567,10 @@ export async function getIssueByIdFromStore(id: string): Promise<Issue | undefin
   return fetchIssueFromSupabase(id);
 }
 
+export async function refreshIssueByIdFromStore(id: string): Promise<Issue | undefined> {
+  return fetchIssueFromSupabase(id);
+}
+
 export async function addIssueToStore(newIssue: Omit<Issue, 'id' | 'createdAt'>): Promise<Issue> {
   const payload = await toIssueInsertRow(newIssue);
 

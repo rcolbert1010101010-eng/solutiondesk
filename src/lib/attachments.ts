@@ -284,15 +284,21 @@ async function uploadAttachment(parent: { issueId?: string | null; resolutionId?
   }
 
   const storagePath = `${parentType}s/${parentId}/${crypto.randomUUID()}-${sanitizeFileName(file.name)}`;
-  const contentType = file.type || MIME_BY_EXTENSION[extension] || 'application/octet-stream';
+  const hasSpecificBrowserMimeType = Boolean(file.type) && file.type !== 'application/octet-stream';
+  const uploadOptions = hasSpecificBrowserMimeType
+    ? {
+        upsert: false,
+        contentType: file.type,
+      }
+    : {
+        upsert: false,
+      };
+  const mimeType = file.type || MIME_BY_EXTENSION[extension] || 'application/octet-stream';
 
   const { error: uploadError } = await supabase
     .storage
     .from(ATTACHMENTS_BUCKET)
-    .upload(storagePath, file, {
-      upsert: false,
-      contentType,
-    });
+    .upload(storagePath, file, uploadOptions);
 
   if (uploadError) throw formatAttachmentError(uploadError, `Unable to upload ${file.name}.`);
 
@@ -304,7 +310,7 @@ async function uploadAttachment(parent: { issueId?: string | null; resolutionId?
       bucket_name: ATTACHMENTS_BUCKET,
       storage_path: storagePath,
       file_name: file.name,
-      mime_type: contentType,
+      mime_type: mimeType,
       file_size: file.size,
       file_extension: extension || null,
     })

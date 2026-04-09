@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
-  getIssueById,
+  refreshIssueById,
   updateIssue,
   deleteIssue,
   addResolution,
@@ -297,7 +297,7 @@ export const IssueDetail: React.FC = () => {
 
   const loadIssue = async () => {
     if (!id) return;
-    const found = await getIssueById(id);
+    const found = await refreshIssueById(id);
     if (!found) { navigate('/issues'); return; }
     setIssue(found);
     setEditForm({
@@ -531,7 +531,7 @@ export const IssueDetail: React.FC = () => {
       if (attachmentSync.attachmentIdsToDelete.length > 0 || attachmentSync.filesToUpload.length > 0) {
         await syncResolutionAttachments(editingResolutionId, attachmentSync);
       }
-      setIssue(updated);
+      await loadIssue();
       setAllIssues(await getAllIssues());
       cancelResolutionEdit();
     } catch (err) {
