@@ -4,22 +4,7 @@ import type { Attachment, AttachmentParentType } from '../types';
 export const ATTACHMENTS_BUCKET = 'solutiondesk-attachments';
 export const ATTACHMENTS_CHANGED_EVENT = 'resolution_desk_attachments_changed';
 
-const ACCEPTED_ATTACHMENT_EXTENSIONS = [
-  'png',
-  'jpg',
-  'jpeg',
-  'gif',
-  'webp',
-  'pdf',
-  'doc',
-  'docx',
-  'xls',
-  'xlsx',
-  'txt',
-] as const;
-
 const IMAGE_ATTACHMENT_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp']);
-const ACCEPTED_ATTACHMENT_EXTENSION_SET = new Set<string>(ACCEPTED_ATTACHMENT_EXTENSIONS);
 
 const MIME_BY_EXTENSION: Record<string, string> = {
   png: 'image/png',
@@ -78,7 +63,7 @@ function formatAttachmentError(error: unknown, fallback: string): Error {
   return new Error(fallback);
 }
 
-export const ATTACHMENT_INPUT_ACCEPT = ACCEPTED_ATTACHMENT_EXTENSIONS.map(extension => `.${extension}`).join(',');
+export const ATTACHMENT_INPUT_ACCEPT = '*/*';
 
 export function getAttachmentExtension(fileName: string): string {
   const segments = fileName.trim().split('.');
@@ -86,8 +71,8 @@ export function getAttachmentExtension(fileName: string): string {
 }
 
 export function isAllowedAttachmentFile(fileName: string): boolean {
-  const extension = getAttachmentExtension(fileName);
-  return ACCEPTED_ATTACHMENT_EXTENSION_SET.has(extension);
+  void fileName;
+  return true;
 }
 
 export function isImageAttachment(input: Pick<Attachment, 'fileName' | 'fileExtension' | 'mimeType'>): boolean {
@@ -123,14 +108,8 @@ export function replaceAttachmentDraftState(_current: AttachmentDraftState, atta
 
 export function addFilesToAttachmentDraftState(current: AttachmentDraftState, files: File[]): AttachmentDraftState {
   const nextItems = [...current.items];
-  const nextMessages = [...current.messages];
 
   for (const file of files) {
-    if (!isAllowedAttachmentFile(file.name)) {
-      nextMessages.push(`Unsupported file type for ${file.name}. Allowed: ${ACCEPTED_ATTACHMENT_EXTENSIONS.join(', ')}.`);
-      continue;
-    }
-
     nextItems.push({
       id: `new:${crypto.randomUUID()}`,
       kind: 'new',
@@ -144,7 +123,7 @@ export function addFilesToAttachmentDraftState(current: AttachmentDraftState, fi
 
   return {
     items: nextItems,
-    messages: nextMessages.slice(-3),
+    messages: [],
   };
 }
 
@@ -298,10 +277,6 @@ export async function listAttachmentsForResolution(resolutionId: string): Promis
 
 async function uploadAttachment(parent: { issueId?: string | null; resolutionId?: string | null }, file: File): Promise<Attachment> {
   const extension = getAttachmentExtension(file.name);
-  if (!ACCEPTED_ATTACHMENT_EXTENSION_SET.has(extension)) {
-    throw new Error(`Unsupported file type for ${file.name}.`);
-  }
-
   const parentType: AttachmentParentType = parent.resolutionId ? 'resolution' : 'issue';
   const parentId = parent.resolutionId ?? parent.issueId;
   if (!parentId) {

@@ -15,7 +15,6 @@ import type { Attachment } from '../types';
 import {
   addFilesToAttachmentDraftState,
   ATTACHMENT_INPUT_ACCEPT,
-  clearAttachmentDraftMessages,
   createAttachmentDraftState,
   downloadAttachment,
   formatAttachmentFileSize,
@@ -143,7 +142,7 @@ export const AttachmentPanel: React.FC<AttachmentPanelProps> = ({
     if (mode !== 'edit' || !onChangeDraftState) return;
     const files = Array.from(event.target.files ?? []);
     if (files.length === 0) return;
-    onChangeDraftState(addFilesToAttachmentDraftState(clearAttachmentDraftMessages(effectiveDraftState), files));
+    onChangeDraftState(addFilesToAttachmentDraftState(effectiveDraftState, files));
     event.target.value = '';
   };
 
@@ -172,7 +171,7 @@ export const AttachmentPanel: React.FC<AttachmentPanelProps> = ({
           <p className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-zinc-500">{title}</p>
           <p className="mt-1 text-xs text-slate-500 dark:text-zinc-500">
             {mode === 'edit'
-              ? 'Images and common office documents are supported.'
+              ? 'Any file type can be attached.'
               : `${attachments.length} file${attachments.length === 1 ? '' : 's'} attached.`}
           </p>
         </div>
@@ -203,14 +202,6 @@ export const AttachmentPanel: React.FC<AttachmentPanelProps> = ({
         <p className="mb-3 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-400">
           {actionError}
         </p>
-      )}
-
-      {mode === 'edit' && effectiveDraftState.messages.length > 0 && (
-        <div className="mb-3 space-y-1">
-          {effectiveDraftState.messages.map(message => (
-            <p key={message} className="text-xs text-red-400">{message}</p>
-          ))}
-        </div>
       )}
 
       {mode === 'edit' && visibleDraftItems.length === 0 ? (
