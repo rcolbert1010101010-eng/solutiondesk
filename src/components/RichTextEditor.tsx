@@ -1,5 +1,6 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
-import DOMPurify from 'dompurify';
+import DOMPurify from 'dompurify'; 
+import { stripHtmlToText } from '../lib/richText'; 
 
 interface RichTextEditorProps {
   valueHtml: string;
@@ -8,84 +9,17 @@ interface RichTextEditorProps {
   placeholder?: string;
 }
 
-interface FormatState {
-  bold: boolean;
-  italic: boolean;
-  underline: boolean;
-  bulletList: boolean;
-  orderedList: boolean;
-}
+interface FormatState { 
+  bold: boolean; 
+  italic: boolean; 
+  underline: boolean; 
+  bulletList: boolean; 
+  orderedList: boolean; 
+  codeBlock: boolean; 
+  heading: 'p' | 'h1' | 'h2' | 'h3'; 
+} 
 
-const MAX_IMAGE_BYTES = Math.round(1.5 * 1024 * 1024);
-const BLOCK_TAGS = new Set([
-  'address', 'article', 'aside', 'blockquote', 'div', 'dl', 'fieldset', 'figcaption', 'figure',
-  'footer', 'form', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'header', 'hr', 'li', 'main', 'nav',
-  'ol', 'p', 'pre', 'section', 'table', 'tbody', 'td', 'tfoot', 'th', 'thead', 'tr', 'ul'
-]);
-
-export function stripHtmlToText(html: string): string {
-  const source = (html ?? '').trim();
-  if (!source) return '';
-
-  if (typeof window === 'undefined' || typeof window.DOMParser === 'undefined') {
-    return source
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/<\/\s*(p|div|li|ul|ol|h[1-6]|blockquote|pre|tr|td|th)\s*>/gi, '\n')
-      .replace(/<[^>]*>/g, ' ')
-      .replace(/\u00a0/g, ' ')
-      .replace(/[ \t]+\n/g, '\n')
-      .replace(/\n{3,}/g, '\n\n')
-      .replace(/[ \t]{2,}/g, ' ')
-      .trim();
-  }
-
-  const doc = new window.DOMParser().parseFromString(source, 'text/html');
-  const lines: string[] = [];
-  let currentLine = '';
-
-  const flushLine = () => {
-    const line = currentLine
-      .replace(/\u00a0/g, ' ')
-      .replace(/[ \t]+/g, ' ')
-      .trim();
-
-    if (line) lines.push(line);
-    currentLine = '';
-  };
-
-  const walk = (node: Node) => {
-    if (node.nodeType === Node.TEXT_NODE) {
-      currentLine += node.textContent ?? '';
-      return;
-    }
-
-    if (node.nodeType !== Node.ELEMENT_NODE) return;
-    const element = node as HTMLElement;
-    const tag = element.tagName.toLowerCase();
-
-    if (tag === 'br') {
-      flushLine();
-      return;
-    }
-
-    if (tag === 'img') {
-      flushLine();
-      return;
-    }
-
-    const isBlock = BLOCK_TAGS.has(tag);
-    if (isBlock) flushLine();
-
-    Array.from(element.childNodes).forEach(walk);
-
-    if (isBlock) flushLine();
-  };
-
-  Array.from(doc.body.childNodes).forEach(walk);
-  flushLine();
-
-  return lines.join('\n').trim();
-}
+const MAX_IMAGE_BYTES = Math.round(1.5 * 1024 * 1024); 
 
 function normalizeEditorHtml(html: string): string {
   const trimmed = (html ?? '').trim();
@@ -155,14 +89,16 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
 }) => {
   const editorRef = useRef<HTMLDivElement>(null);
   const [message, setMessage] = useState('');
-  const [formatState, setFormatState] = useState<FormatState>({
-    bold: false,
-    italic: false,
-    underline: false,
-    bulletList: false,
-    orderedList: false,
-  });
-
+  const [formatState, setFormatState] = useState<FormatState>({ 
+    bold: false, 
+    italic: false, 
+    underline: false, 
+    bulletList: false, 
+    orderedList: false, 
+    codeBlock: false, 
+    heading: 'p', 
+  }); 
+ 
   const emitChange = () => {
     const editor = editorRef.current;
     if (!editor) return;
@@ -171,40 +107,55 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
     onChangeText?.(stripHtmlToText(html));
   };
 
-  const updateFormatState = () => {
-    const editor = editorRef.current;
-    if (!editor) return;
-
-    const active = isSelectionInside(editor);
-    if (!active) {
-      setFormatState({
-        bold: false,
-        italic: false,
-        underline: false,
-        bulletList: false,
-        orderedList: false,
-      });
-      return;
-    }
-
-    setFormatState({
-      bold: document.queryCommandState('bold'),
-      italic: document.queryCommandState('italic'),
-      underline: document.queryCommandState('underline'),
-      bulletList: document.queryCommandState('insertUnorderedList'),
-      orderedList: document.queryCommandState('insertOrderedList'),
-    });
-  };
-
-  const runCommand = (command: string, value?: string) => {
-    const editor = editorRef.current;
-    if (!editor) return;
-
-    editor.focus();
-    document.execCommand(command, false, value);
-    emitChange();
-    updateFormatState();
-  };
+  const updateFormatState = () => { 
+    const editor = editorRef.current; 
+    if (!editor) return; 
+ 
+    const active = isSelectionInside(editor); 
+    if (!active) { 
+      setFormatState({ 
+        bold: false, 
+        italic: false, 
+        underline: false, 
+        bulletList: false, 
+        orderedList: false, 
+        codeBlock: false, 
+        heading: 'p', 
+      }); 
+      return; 
+    } 
+ 
+    const selection = window.getSelection(); 
+    const container = selection && selection.rangeCount > 0 ? selection.getRangeAt(0).commonAncestorContainer : null; 
+    const containerElement = container 
+      ? (container.nodeType === Node.ELEMENT_NODE ? (container as Element) : container.parentElement) 
+      : null; 
+    const withinEditor = containerElement ? editor.contains(containerElement) : false; 
+    const nearestBlock = withinEditor ? containerElement?.closest('pre,h1,h2,h3,p') : null; 
+    const headingCandidate = (nearestBlock?.tagName?.toLowerCase() ?? 'p') as FormatState['heading'] | 'pre'; 
+    const codeBlock = withinEditor ? Boolean(containerElement?.closest('pre')) : false; 
+ 
+    setFormatState({ 
+      bold: document.queryCommandState('bold'), 
+      italic: document.queryCommandState('italic'), 
+      underline: document.queryCommandState('underline'), 
+      bulletList: document.queryCommandState('insertUnorderedList'), 
+      orderedList: document.queryCommandState('insertOrderedList'), 
+      codeBlock, 
+      heading: headingCandidate === 'h1' || headingCandidate === 'h2' || headingCandidate === 'h3' ? headingCandidate : 'p', 
+    }); 
+  }; 
+ 
+  const runCommand = (command: string, value?: string) => { 
+    const editor = editorRef.current; 
+    if (!editor) return; 
+ 
+    editor.focus(); 
+    document.execCommand('styleWithCSS', false, 'false'); 
+    document.execCommand(command, false, value); 
+    emitChange(); 
+    updateFormatState(); 
+  }; 
 
   const runListCommand = (command: 'insertUnorderedList' | 'insertOrderedList') => {
     const editor = editorRef.current;
@@ -214,8 +165,18 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
     document.execCommand('styleWithCSS', false, 'false');
     document.execCommand(command, false);
     emitChange();
-    updateFormatState();
-  };
+    updateFormatState(); 
+  }; 
+ 
+  const applyBlockFormat = (tag: 'p' | 'h1' | 'h2' | 'h3' | 'pre') => { 
+    const editor = editorRef.current; 
+    if (!editor) return; 
+ 
+    editor.focus(); 
+    document.execCommand('formatBlock', false, tag); 
+    emitChange(); 
+    updateFormatState(); 
+  }; 
 
   useEffect(() => {
     const editor = editorRef.current;
@@ -293,14 +254,26 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
   const toolbarInactive = 'border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-800';
   const toolbarActive = 'border-amber-500/50 bg-amber-500/10 text-amber-500';
 
-  return (
-    <div>
-      <div className="mb-2 flex flex-wrap gap-1.5">
-        <button
-          type="button"
-          className={`${toolbarBase} ${formatState.bold ? toolbarActive : toolbarInactive}`}
-          onMouseDown={e => { e.preventDefault(); runCommand('bold'); }}
-          title="Bold"
+  return ( 
+    <div> 
+      <div className="mb-2 flex flex-wrap gap-1.5"> 
+        <select 
+          className="h-8 rounded-md border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 text-xs text-slate-600 dark:text-zinc-300" 
+          value={formatState.codeBlock ? 'pre' : formatState.heading} 
+          onChange={e => applyBlockFormat(e.target.value as 'p' | 'h1' | 'h2' | 'h3' | 'pre')} 
+          title="Text style" 
+        > 
+          <option value="p">Normal</option> 
+          <option value="h1">Heading 1</option> 
+          <option value="h2">Heading 2</option> 
+          <option value="h3">Heading 3</option> 
+          <option value="pre">Code block</option> 
+        </select> 
+        <button 
+          type="button" 
+          className={`${toolbarBase} ${formatState.bold ? toolbarActive : toolbarInactive}`} 
+          onMouseDown={e => { e.preventDefault(); runCommand('bold'); }} 
+          title="Bold" 
         >
           B
         </button>
@@ -328,19 +301,35 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
         >
           • List
         </button>
-        <button
-          type="button"
-          className={`${toolbarBase} ${formatState.orderedList ? toolbarActive : toolbarInactive}`}
-          onMouseDown={e => { e.preventDefault(); runListCommand('insertOrderedList'); }}
-          title="Numbered list"
-        >
-          1. List
-        </button>
-        <button
-          type="button"
-          className={`${toolbarBase} ${toolbarInactive}`}
-          onMouseDown={e => {
-            e.preventDefault();
+        <button 
+          type="button" 
+          className={`${toolbarBase} ${formatState.orderedList ? toolbarActive : toolbarInactive}`} 
+          onMouseDown={e => { e.preventDefault(); runListCommand('insertOrderedList'); }} 
+          title="Numbered list" 
+        > 
+          1. List 
+        </button> 
+        <button 
+          type="button" 
+          className={`${toolbarBase} ${toolbarInactive}`} 
+          onMouseDown={e => { e.preventDefault(); runCommand('indent'); }} 
+          title="Indent (Tab)" 
+        > 
+          Indent 
+        </button> 
+        <button 
+          type="button" 
+          className={`${toolbarBase} ${toolbarInactive}`} 
+          onMouseDown={e => { e.preventDefault(); runCommand('outdent'); }} 
+          title="Outdent (Shift+Tab)" 
+        > 
+          Outdent 
+        </button> 
+        <button 
+          type="button" 
+          className={`${toolbarBase} ${toolbarInactive}`} 
+          onMouseDown={e => { 
+            e.preventDefault(); 
             const url = window.prompt('Enter URL');
             if (!url) return;
             runCommand('createLink', url.trim());

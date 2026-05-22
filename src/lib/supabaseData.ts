@@ -23,7 +23,7 @@ import {
   syncIssueAttachments as syncIssueAttachmentsStore,
   syncResolutionAttachments as syncResolutionAttachmentsStore,
 } from './attachments';
-import { htmlToPlainText, plainTextToHtml } from './richText';
+import { htmlToPlainText, plainTextToHtml, stripHtmlToText } from './richText'; 
 
 export const TAGS_STORAGE_KEY = 'resolution_desk_tags';
 export const ISSUES_STORAGE_KEY = 'resolution_desk_issues';
@@ -133,15 +133,16 @@ interface IssueWriteShape extends Partial<Issue> {
   legacyId?: string | null;
 }
 
-interface ResolutionWriteShape extends Partial<Resolution> {
-  issueId?: string | null;
-  legacyId?: string | null;
-  title: string;
-  steps: string[];
-  notes?: string;
-  notesText?: string;
-  tags?: string[];
-}
+interface ResolutionWriteShape extends Partial<Resolution> { 
+  issueId?: string | null; 
+  legacyId?: string | null; 
+  title: string; 
+  steps: string[]; 
+  stepsHtml?: string; 
+  notes?: string; 
+  notesText?: string; 
+  tags?: string[]; 
+} 
 
 let bootstrapPromise: Promise<void> | null = null;
 let tagsCache: Tag[] = [];
@@ -274,24 +275,45 @@ function stepsLinesToHtml(lines: string[]): string {
   return `<ol>${items.join('')}</ol>`;
 }
 
-function toStepText(value: unknown): string {
-  if (value === null || value === undefined) return '';
-  if (typeof value === 'string') return value.trim();
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
-}
-
-function normalizeResolutionSteps(steps: unknown): string[] {
-  if (Array.isArray(steps)) {
-    return steps
-      .flatMap(step => toStepText(step).split(/\r?\n/))
-      .map(step => step.trim())
-      .filter(Boolean);
-  }
+function toStepText(value: unknown): string { 
+  if (value === null || value === undefined) return ''; 
+  if (typeof value === 'string') return value.trim(); 
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value); 
+  try { 
+    return JSON.stringify(value); 
+  } catch { 
+    return String(value); 
+  } 
+} 
+ 
+type RichStepsPayload = { format: 'rich_v1'; html: string; text?: string }; 
+ 
+function isRichStepsPayload(value: unknown): value is RichStepsPayload { 
+  if (!value || typeof value !== 'object') return false; 
+  const candidate = value as Record<string, unknown>; 
+  return candidate.format === 'rich_v1' && typeof candidate.html === 'string'; 
+} 
+ 
+function isMeaningfulEditorHtml(html: string | null | undefined): html is string { 
+  const trimmed = (html ?? '').trim(); 
+  if (!trimmed) return false; 
+  return trimmed !== '<p></p>' && trimmed !== '<br>' && trimmed !== '<p><br></p>'; 
+} 
+ 
+function normalizeResolutionSteps(steps: unknown): string[] { 
+  if (isRichStepsPayload(steps)) { 
+    return stripHtmlToText(steps.html) 
+      .split(/\r?\n/) 
+      .map(step => step.trim()) 
+      .filter(Boolean); 
+  } 
+ 
+  if (Array.isArray(steps)) { 
+    return steps 
+      .flatMap(step => toStepText(step).split(/\r?\n/)) 
+      .map(step => step.trim()) 
+      .filter(Boolean); 
+  } 
 
   if (typeof steps === 'string') {
     return steps
@@ -424,29 +446,30 @@ function buildRelationshipStats(rows: IssueRow[]): {
   return { counts, lastLinkedAt };
 }
 
-function mapResolutionRow(
-  row: ResolutionRow,
-  tagsById: Map<string, Tag>,
-  attachments: Attachment[] = [],
-): Resolution {
-  const steps = normalizeResolutionSteps(row.steps);
-  const notesHtml = row.notes?.trim() || undefined;
-  const notesText = notesHtml ? htmlToPlainText(notesHtml) : undefined;
-  const summary = row.title?.trim() || steps[0] || notesText || 'Resolution';
-  const rootCause = notesText ? notesText.split(/\r?\n/).map(line => line.trim()).find(Boolean) : undefined;
-
-  return {
+function mapResolutionRow( 
+  row: ResolutionRow, 
+  tagsById: Map<string, Tag>, 
+  attachments: Attachment[] = [], 
+): Resolution { 
+  const steps = normalizeResolutionSteps(row.steps); 
+  const richStepsHtml = isRichStepsPayload(row.steps) ? row.steps.html.trim() : ''; 
+  const notesHtml = row.notes?.trim() || undefined; 
+  const notesText = notesHtml ? htmlToPlainText(notesHtml) : undefined; 
+  const summary = row.title?.trim() || steps[0] || notesText || 'Resolution'; 
+  const rootCause = notesText ? notesText.split(/\r?\n/).map(line => line.trim()).find(Boolean) : undefined; 
+ 
+  return { 
     id: row.id,
     issueId: row.issue_id,
     title: row.title,
-    summary,
-    rootCause,
-    steps,
-    stepsHtml: stepsLinesToHtml(steps),
-    notes: notesHtml,
-    notesText,
-    tags: mapTagIdsToNames(row.tags, tagsById),
-    attachments,
+    summary, 
+    rootCause, 
+    steps, 
+    stepsHtml: isMeaningfulEditorHtml(richStepsHtml) ? richStepsHtml : stepsLinesToHtml(steps), 
+    notes: notesHtml, 
+    notesText, 
+    tags: mapTagIdsToNames(row.tags, tagsById), 
+    attachments, 
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -827,26 +850,27 @@ function parseLegacyRelationships(raw: string | null): LegacyRelationshipRecord[
   }
 }
 
-function normalizeLegacyResolution(resolution: Resolution, issueId?: string): Resolution {
-  const steps = normalizeResolutionSteps(resolution.steps ?? resolution.stepsTaken ?? resolution.stepsHtml ?? '');
-  const notes = normalizeResolutionNotesHtml(resolution);
-  const notesText = notes ? htmlToPlainText(notes) : undefined;
-  const title = normalizeResolutionTitle(resolution, steps);
-  const timestamp = resolution.updatedAt ?? resolution.createdAt ?? resolution.resolvedAt ?? nowIso();
-
-  return {
+function normalizeLegacyResolution(resolution: Resolution, issueId?: string): Resolution { 
+  const steps = normalizeResolutionSteps(resolution.steps ?? resolution.stepsTaken ?? resolution.stepsHtml ?? ''); 
+  const legacyStepsHtml = isMeaningfulEditorHtml(resolution.stepsHtml) ? resolution.stepsHtml.trim() : ''; 
+  const notes = normalizeResolutionNotesHtml(resolution); 
+  const notesText = notes ? htmlToPlainText(notes) : undefined; 
+  const title = normalizeResolutionTitle(resolution, steps); 
+  const timestamp = resolution.updatedAt ?? resolution.createdAt ?? resolution.resolvedAt ?? nowIso(); 
+ 
+  return { 
     ...resolution,
     id: resolution.id || createUuid(),
     issueId: resolution.issueId ?? issueId ?? null,
     title,
-    summary: resolution.summary ?? title,
-    rootCause: resolution.rootCause ?? (notesText ? notesText.split(/\r?\n/).find(Boolean) : undefined),
-    steps,
-    stepsHtml: stepsLinesToHtml(steps),
-    notes,
-    notesText,
-    tags: Array.isArray(resolution.tags) ? resolution.tags : [],
-    createdAt: resolution.createdAt ?? resolution.resolvedAt ?? timestamp,
+    summary: resolution.summary ?? title, 
+    rootCause: resolution.rootCause ?? (notesText ? notesText.split(/\r?\n/).find(Boolean) : undefined), 
+    steps, 
+    stepsHtml: legacyStepsHtml || stepsLinesToHtml(steps), 
+    notes, 
+    notesText, 
+    tags: Array.isArray(resolution.tags) ? resolution.tags : [], 
+    createdAt: resolution.createdAt ?? resolution.resolvedAt ?? timestamp, 
     updatedAt: timestamp,
   };
 }
@@ -1273,22 +1297,31 @@ function toIssueWriteShape(base: Partial<Issue>, updates?: Partial<Issue>): Issu
   };
 }
 
-function toResolutionWriteShape(base: Partial<Resolution>, updates?: Partial<Resolution>): ResolutionWriteShape {
-  const merged = { ...base, ...updates };
-  const steps = normalizeResolutionSteps(merged.steps ?? merged.stepsHtml ?? merged.stepsTaken ?? '');
-  const notes = normalizeResolutionNotesHtml(merged);
-  const notesText = notes ? htmlToPlainText(notes) : undefined;
-
-  return {
-    issueId: merged.issueId ?? null,
-    legacyId: (merged as { legacyId?: string | null }).legacyId ?? null,
-    title: normalizeResolutionTitle(merged, steps),
-    steps,
-    notes,
-    notesText,
-    tags: Array.isArray(merged.tags) ? merged.tags : [],
-  };
-}
+function toResolutionWriteShape(base: Partial<Resolution>, updates?: Partial<Resolution>): ResolutionWriteShape { 
+  const merged = { ...base, ...updates }; 
+  const stepsHtml = isMeaningfulEditorHtml((merged as { stepsHtml?: string }).stepsHtml) 
+    ? String((merged as { stepsHtml?: string }).stepsHtml).trim() 
+    : undefined; 
+  const steps = stepsHtml 
+    ? stripHtmlToText(stepsHtml) 
+      .split(/\r?\n/) 
+      .map(step => step.trim()) 
+      .filter(Boolean) 
+    : normalizeResolutionSteps(merged.steps ?? merged.stepsTaken ?? ''); 
+  const notes = normalizeResolutionNotesHtml(merged); 
+  const notesText = notes ? htmlToPlainText(notes) : undefined; 
+ 
+  return { 
+    issueId: merged.issueId ?? null, 
+    legacyId: (merged as { legacyId?: string | null }).legacyId ?? null, 
+    title: normalizeResolutionTitle(merged, steps), 
+    steps, 
+    stepsHtml, 
+    notes, 
+    notesText, 
+    tags: Array.isArray(merged.tags) ? merged.tags : [], 
+  }; 
+} 
 
 export function toIssueRowPayload(input: Partial<Issue> | any): Record<string, any> {
   return {
@@ -1313,16 +1346,26 @@ export function toIssueRowPayload(input: Partial<Issue> | any): Record<string, a
   };
 }
 
-export function toResolutionRowPayload(input: Partial<Resolution> | any): Record<string, any> {
-  return {
-    issue_id: ('issueId' in input ? input.issueId : input.issue_id) ?? null,
-    legacy_id: ('legacyId' in input ? input.legacyId : input.legacy_id) ?? null,
-    title: input.title ?? 'Resolution',
-    steps: Array.isArray(input.steps) ? input.steps : normalizeResolutionSteps(input.steps),
-    notes: input.notes ?? null,
-    tags: Array.isArray(input.tags) ? input.tags : [],
-  };
-}
+export function toResolutionRowPayload(input: Partial<Resolution> | any): Record<string, any> { 
+  const stepsHtml = ( 
+    'stepsHtml' in input 
+      ? input.stepsHtml 
+      : (input.steps_html ?? null) 
+  ) as string | null; 
+ 
+  const richSteps: RichStepsPayload | undefined = isMeaningfulEditorHtml(stepsHtml) 
+    ? { format: 'rich_v1', html: stepsHtml.trim(), text: stripHtmlToText(stepsHtml.trim()) } 
+    : undefined; 
+ 
+  return { 
+    issue_id: ('issueId' in input ? input.issueId : input.issue_id) ?? null, 
+    legacy_id: ('legacyId' in input ? input.legacyId : input.legacy_id) ?? null, 
+    title: input.title ?? 'Resolution', 
+    steps: richSteps ?? (isRichStepsPayload(input.steps) ? input.steps : (Array.isArray(input.steps) ? input.steps : normalizeResolutionSteps(input.steps))), 
+    notes: input.notes ?? null, 
+    tags: Array.isArray(input.tags) ? input.tags : [], 
+  }; 
+} 
 async function toIssueInsertRow(issue: Omit<Issue, 'id' | 'createdAt'>): Promise<Record<string, any>> {
   const normalized = toIssueWriteShape(issue);
   if (!normalized.title) {
