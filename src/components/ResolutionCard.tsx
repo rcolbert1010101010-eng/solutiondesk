@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Clock, ExternalLink, Eye, Pencil, Trash2 } from 'lucide-react';
 import type { Resolution } from '../types';
-import { SanitizedHtmlContent } from './RichTextEditor';
+import { RICH_TEXT_RENDER_CLASSNAME_COMPACT, SanitizedHtmlContent } from './RichTextEditor'; 
 import { TagBadge } from './TagBadge';
 import { useTheme } from '../context/ThemeContext';
 import {
@@ -68,14 +68,14 @@ export const ResolutionCard: React.FC<ResolutionCardProps> = ({ resolution, onPr
         </span>
       </div>
 
-      {stepsHtml !== '<p></p>' && (
-        <div className="mb-3">
-          <SanitizedHtmlContent
-            html={stepsHtml}
-            className="prose prose-sm max-w-none text-xs text-slate-600 dark:text-zinc-400 dark:prose-invert prose-ol:my-0 prose-ul:my-0 prose-li:my-0.5 prose-img:rounded-md prose-img:border prose-img:border-slate-200 dark:prose-img:border-zinc-700"
-          />
-        </div>
-      )}
+      {stepsHtml !== '<p></p>' && ( 
+        <div className="mb-3"> 
+          <SanitizedHtmlContent 
+            html={stepsHtml} 
+            className={`${RICH_TEXT_RENDER_CLASSNAME_COMPACT} text-slate-600 dark:text-zinc-400`} 
+          /> 
+        </div> 
+      )} 
 
       {preview && (
         <p className={`text-xs mb-3 line-clamp-2 ${isDark ? 'text-zinc-500' : 'text-slate-500'}`}>

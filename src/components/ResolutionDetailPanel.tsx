@@ -3,7 +3,7 @@ import { Clock, Link as LinkIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { Resolution } from '../types';
 import { AttachmentPanel } from './AttachmentPanel';
-import { SanitizedHtmlContent } from './RichTextEditor';
+import { RICH_TEXT_RENDER_CLASSNAME, SanitizedHtmlContent } from './RichTextEditor'; 
 import { TagBadge } from './TagBadge';
 import {
   getResolutionNotesHtml,
@@ -77,28 +77,28 @@ export const ResolutionDetailPanel: React.FC<ResolutionDetailPanelProps> = ({ re
           <div className="mb-3">
             <p className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-zinc-500">Steps</p>
           </div>
-          {hasSteps ? (
-            <SanitizedHtmlContent
-              html={stepsHtml}
-              className="prose prose-sm max-w-none text-slate-700 dark:text-zinc-300 dark:prose-invert prose-li:my-1 prose-img:rounded-md prose-img:border prose-img:border-slate-200 dark:prose-img:border-zinc-700"
-            />
-          ) : (
-            <p className="text-sm text-slate-500 dark:text-zinc-500">No steps documented.</p>
-          )}
+          {hasSteps ? ( 
+            <SanitizedHtmlContent 
+              html={stepsHtml} 
+              className={RICH_TEXT_RENDER_CLASSNAME} 
+            /> 
+          ) : ( 
+            <p className="text-sm text-slate-500 dark:text-zinc-500">No steps documented.</p> 
+          )} 
         </section>
 
         <section className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/70">
           <div className="mb-3">
             <p className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-zinc-500">Notes</p>
           </div>
-          {hasNotes ? (
-            <SanitizedHtmlContent
-              html={notesHtml}
-              className="prose prose-sm max-w-none text-slate-700 dark:text-zinc-300 dark:prose-invert prose-img:rounded-md prose-img:border prose-img:border-slate-200 dark:prose-img:border-zinc-700"
-            />
-          ) : (
-            <p className="text-sm text-slate-500 dark:text-zinc-500">No notes attached.</p>
-          )}
+          {hasNotes ? ( 
+            <SanitizedHtmlContent 
+              html={notesHtml} 
+              className={RICH_TEXT_RENDER_CLASSNAME} 
+            /> 
+          ) : ( 
+            <p className="text-sm text-slate-500 dark:text-zinc-500">No notes attached.</p> 
+          )} 
         </section>
       </div>
 

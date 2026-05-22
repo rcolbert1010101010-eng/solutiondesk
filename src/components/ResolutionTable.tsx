@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { ExternalLink, Eye, Pencil, Trash2 } from 'lucide-react';
 import type { Resolution } from '../types';
 import { TagBadge } from './TagBadge';
-import { SanitizedHtmlContent } from './RichTextEditor';
+import { RICH_TEXT_RENDER_CLASSNAME_COMPACT, SanitizedHtmlContent } from './RichTextEditor'; 
 import { useTheme } from '../context/ThemeContext';
 import {
   getResolutionDetailPath,
@@ -64,14 +64,14 @@ export const ResolutionTable: React.FC<ResolutionTableProps> = ({ resolutions, o
                     <div className={`text-sm font-medium truncate ${isDark ? 'text-zinc-200' : 'text-slate-700'}`}>
                       {getResolutionTitle(resolution)}
                     </div>
-                    {stepsHtml !== '<p></p>' && (
-                      <div className="mt-1">
-                        <SanitizedHtmlContent
-                          html={stepsHtml}
-                          className="prose prose-sm max-w-none text-xs text-slate-600 dark:text-zinc-400 dark:prose-invert prose-ol:my-0 prose-ul:my-0 prose-li:my-0.5 prose-img:rounded-md prose-img:border prose-img:border-slate-200 dark:prose-img:border-zinc-700"
-                        />
-                      </div>
-                    )}
+                    {stepsHtml !== '<p></p>' && ( 
+                      <div className="mt-1"> 
+                        <SanitizedHtmlContent 
+                          html={stepsHtml} 
+                          className={`${RICH_TEXT_RENDER_CLASSNAME_COMPACT} text-slate-600 dark:text-zinc-400`} 
+                        /> 
+                      </div> 
+                    )} 
                     {preview && (
                       <p className={`mt-1 text-xs line-clamp-2 ${isDark ? 'text-zinc-500' : 'text-slate-500'}`}>
                         {preview}

@@ -382,7 +382,7 @@ interface SanitizedHtmlContentProps {
   className?: string;
 }
 
-export const SanitizedHtmlContent: React.FC<SanitizedHtmlContentProps> = ({ html, className }) => {
+export const SanitizedHtmlContent: React.FC<SanitizedHtmlContentProps> = ({ html, className }) => { 
   const safeHtml = useMemo(
     () => DOMPurify.sanitize(html ?? '', {
       USE_PROFILES: { html: true },
@@ -399,5 +399,26 @@ export const SanitizedHtmlContent: React.FC<SanitizedHtmlContentProps> = ({ html
       dangerouslySetInnerHTML={{ __html: safeHtml }}
     />
   );
-};
+}; 
+
+export const RICH_TEXT_RENDER_CLASSNAME = ( 
+  'text-sm text-slate-700 dark:text-zinc-300 ' 
+  + '[&_h1]:text-xl [&_h1]:font-semibold [&_h1]:my-3 ' 
+  + '[&_h2]:text-lg [&_h2]:font-semibold [&_h2]:my-3 ' 
+  + '[&_h3]:text-base [&_h3]:font-semibold [&_h3]:my-2.5 ' 
+  + '[&_p]:my-2 ' 
+  + '[&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 ' 
+  + '[&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 ' 
+  + '[&_li]:my-1 ' 
+  + '[&_pre]:my-2 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-slate-200 dark:[&_pre]:border-zinc-700 [&_pre]:bg-slate-100/60 dark:[&_pre]:bg-zinc-900 [&_pre]:p-3 ' 
+  + '[&_code]:rounded [&_code]:bg-slate-100 dark:[&_code]:bg-zinc-900 [&_code]:px-1 [&_code]:py-0.5 ' 
+  + '[&_a]:text-blue-500 [&_a]:underline ' 
+  + '[&_img]:rounded-md [&_img]:border [&_img]:border-slate-200 dark:[&_img]:border-zinc-700' 
+); 
+ 
+export const RICH_TEXT_RENDER_CLASSNAME_COMPACT = ( 
+  RICH_TEXT_RENDER_CLASSNAME 
+    .replace('text-sm', 'text-xs') 
+    + ' [&_p]:my-1 [&_ol]:my-1 [&_ul]:my-1 [&_li]:my-0.5' 
+); 
 
